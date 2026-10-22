@@ -189,7 +189,8 @@ def extract_deep(paths: list[str], workers: int | None = None, progress=log) -> 
     """Make sure every track has MAEST, mood, instrument and extra features cached (parallel, resumable)."""
     if analysis.instrument_model() is None or analysis.voice_model() is None:
         progress(f"  instrument/vocals model not available ({analysis._instr.get('why', 'not downloaded; run setup')})")
-    todo = [p for p in paths if analysis.deep_missing(analysis.deep_get(Path(p)))]
+    # Files deleted since the scan still have a row in collection.db; the cache lookup would stat them
+    todo = [p for p in paths if Path(p).exists() and analysis.deep_missing(analysis.deep_get(Path(p)))]
     if not todo:
         return {"extracted": 0}
     if workers is None:
