@@ -13,8 +13,12 @@ logs/*
 # macOS
 .DS_Store
 
-# Personal Claude context (see CLAUDE.md)
+# Personal Claude context and notes (see CLAUDE.md)
 CLAUDE.local.md
+*.local.md
+*.local.html
+# Personal skills: kept here, never committed
+.claude/skills/post-mix/
 
 # Databases, models, caches and backups (TRACK_ANALYZER_HOME default)
 data/
