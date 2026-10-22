@@ -228,6 +228,13 @@ def maest_present() -> bool:
     return all((MODELS_DIR / n).exists() for n in MAEST_FILES)
 
 
+def warn_if_maest_missing() -> None:
+    """Genres quietly fall back to EffNet only without MAEST, so say so before a long scan."""
+    if USE_MAEST and not maest_present():
+        log("MAEST isn't downloaded, so genres will use the EffNet model only (less accurate). "
+            "Run `uv run dj-track-analyzer setup` to add it, or set TRACK_ANALYZER_MAEST=0 to silence this.")
+
+
 def maest_input_name(meta: dict) -> str:
     """The graph's input node. This MAEST file calls it "melspectrogram"; Essentia's default
     ("serving_default_melspectrogram") doesn't exist in it, so it must be passed explicitly."""
@@ -1139,12 +1146,19 @@ def track_embedding(p: Path):
 
 
 def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool = True,
-                 genre_bpm: float | None = None, tempo: tuple[float, float] | None = None) -> dict:
+                 genre_bpm: float | None = None, tempo: tuple[float, float] | None = None,
+                 progress: bool = False) -> dict:
     """genre_bpm: a BPM to judge the genre rules by instead of the measured one (scan passes
     Traktor's, which the user may have corrected by hand). tempo: (track's BPM, BPM to play it at)
-    analyses the track sped up / slowed down with key lock (`tempo scan`)."""
+    analyses the track sped up / slowed down with key lock (`tempo scan`). progress: print the stage
+    being worked on to stderr (the `analyze` command)."""
+    def say(msg: str) -> None:
+        if progress:
+            log(f"[{time.time() - t0:5.1f}s] {msg}")
+
     p = resolve_audio(path)
     t0 = time.time()
+    say(f"decoding {p.name}")
     stereo, mono44, mono16, sr = load_audio(p, tempo)
     duration = len(mono44) / 44100.0
     is_mix = duration >= MIX_THRESHOLD_SEC
@@ -1157,6 +1171,7 @@ def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool
         "type": "dj_mix" if is_mix else "track",
     }
 
+    say("measuring loudness")
     short, lufs, lra = loudness(stereo, sr)
     result["loudness"] = {"integrated_lufs": round(lufs, 1), "loudness_range_lu": round(lra, 1)}
 
@@ -1170,6 +1185,7 @@ def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool
         result["key_strength"] = round(strength, 2)
         result["energy_curve"] = energy_curve(short, duration)
     elif not is_mix:
+        say("detecting BPM and key")
         raw_bpm, conf, nbeats = rhythm(mono44)
         result["bpm"] = round_bpm(fold_bpm(raw_bpm))
         if abs(fold_bpm(raw_bpm) - raw_bpm) > 0.5:
@@ -1183,11 +1199,14 @@ def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool
 
     # Style model (needs the downloaded models)
     try:
+        say("running the style model (EffNet)")
         emb, acts, emb_mean, acts_mean, coverage, mask = pooled_effnet(mono16)
         cache_put(p, len(mono16) / 16000.0, emb_mean, acts_mean)
         maest_mean = maest_emb = None
         if not is_mix:  # one MAEST pass gives genre scores and the embedding; reused from the cache if there
             cached = maest_cached(p) if USE_MAEST else None
+            if not cached and USE_MAEST:
+                say("running MAEST (the slowest step)")
             maest_mean, maest_emb = cached if cached else run_maest(mono16)
         scores = label_scores(acts_mean, maest_mean)
         if genre_bpm:
@@ -1202,6 +1221,7 @@ def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool
         }
         if maest_mean is None and not is_mix and _maest.get("why"):
             result["genre_basis"]["maest"] = _maest["why"]
+        say("moods, instruments and colour")
         mine = predict_my_genre(emb_mean)
         if mine:
             result["my_genre"] = mine
@@ -1228,13 +1248,14 @@ def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool
         result["styles_error"] = str(err)
 
     if segment_seconds:
-        result["timeline"] = segment_timeline(mono44, short, emb, acts, duration, segment_seconds)
+        say("building the timeline")
+        result["timeline"] = segment_timeline(mono44, short, emb, acts, duration, segment_seconds, progress)
 
     result["analysis_seconds"] = round(time.time() - t0, 1)
     return result
 
 
-def segment_timeline(mono44, short, emb, acts, duration, seg_sec):
+def segment_timeline(mono44, short, emb, acts, duration, seg_sec, progress=False):
     """Per-segment BPM, key, loudness and style: useful for DJ mixes."""
     timeline = []
     n_seg = max(1, int(np.ceil(duration / seg_sec)))
@@ -1248,6 +1269,8 @@ def segment_timeline(mono44, short, emb, acts, duration, seg_sec):
         start, end = i * seg_sec, min(duration, (i + 1) * seg_sec)
         if end - start < 20:
             break
+        if progress:
+            log(f"  segment {i + 1}/{n_seg}")
         a = mono44[int(start * 44100): int(end * 44100)]
         seg = {"start": fmt_time(start), "end": fmt_time(end)}
         try:

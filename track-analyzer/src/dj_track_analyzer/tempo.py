@@ -177,6 +177,7 @@ def scan(bpm: float = DEFAULT_BPM, workers: int | None = None, rescan: bool = Fa
          nml: str | None = None) -> dict:
     if not analysis.models_present():
         raise SystemExit("Style models missing. Run `uv run dj-track-analyzer setup` first.")
+    analysis.warn_if_maest_missing()
     import shutil
 
     if not (shutil.which("rubberband") or shutil.which("rubberband", path="/opt/homebrew/bin:/usr/local/bin")):

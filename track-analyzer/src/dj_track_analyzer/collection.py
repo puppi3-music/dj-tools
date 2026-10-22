@@ -514,6 +514,7 @@ def scan(roots: list[str], workers: int | None = None, rescan: bool = False,
          exclude: list[str] | None = None, include_recordings: bool = False) -> dict:
     if not analysis.models_present():
         raise SystemExit("Style models missing. Run `uv run dj-track-analyzer setup` first.")
+    analysis.warn_if_maest_missing()
     con = db()
     _drop_decomposed_duplicates(con)
     files = find_audio(roots) if roots else []

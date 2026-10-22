@@ -125,7 +125,7 @@ def main() -> None:
         print("\n".join(sorted(set(names))))
         check_rules()
     elif args.cmd == "analyze":
-        print(json.dumps(analyze_file(args.file, args.segments), indent=2, ensure_ascii=False))
+        print(json.dumps(analyze_file(args.file, args.segments, progress=True), indent=2, ensure_ascii=False))
     elif args.cmd == "train":
         print(json.dumps(train(args.folder), indent=2, ensure_ascii=False))
     elif args.cmd == "scan":
