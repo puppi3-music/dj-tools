@@ -119,7 +119,7 @@ def _make(kind: str, weights: np.ndarray | None = None):
         return make_pipeline(StandardScaler(), RidgeCV(alphas=np.logspace(0, 5, 11)))
     if kind == "classes":
         return make_pipeline(StandardScaler(), LogisticRegressionCV(
-            Cs=[0.003, 0.01, 0.03, 0.1], cv=3, max_iter=3000, class_weight="balanced"))
+            Cs=[0.003, 0.01, 0.03, 0.1], cv=3, max_iter=3000, class_weight="balanced", n_jobs=-1))
     return make_pipeline(StandardScaler(), PCA(n_components=32, random_state=0),
                          KNeighborsRegressor(n_neighbors=15, weights="distance"))
 
@@ -130,7 +130,8 @@ def _calibrator(kind: str, X, y, weights=None):
     from sklearn.isotonic import IsotonicRegression
     from sklearn.model_selection import KFold, cross_val_predict
 
-    inner = cross_val_predict(_make(kind, weights), X, y, cv=KFold(4, shuffle=True, random_state=1))
+    inner = cross_val_predict(_make(kind, weights), X, y, cv=KFold(4, shuffle=True, random_state=1),
+                              n_jobs=-1)
     return IsotonicRegression(y_min=1, y_max=len(COLOR_NAMES), out_of_bounds="clip").fit(inner, y)
 
 
@@ -156,11 +157,18 @@ def _cv(kind, calibrate, X, y, folds, weights=None):
     """Every track predicted by a model that never saw it."""
     from sklearn.model_selection import StratifiedKFold
 
+    from joblib import Parallel, delayed
+
+    def one(tr, te):
+        m, cal = _fit(kind, calibrate, X[tr], y[tr], weights)
+        return te, _predict(kind, m, cal, X[te])
+
     pos = np.zeros(len(y))
     hard = np.zeros(len(y), dtype=int)
-    for tr, te in StratifiedKFold(folds, shuffle=True, random_state=0).split(X, y):
-        m, cal = _fit(kind, calibrate, X[tr], y[tr], weights)
-        pos[te], hard[te] = _predict(kind, m, cal, X[te])
+    # folds in parallel; joblib runs the n_jobs=-1 inside each fold sequentially, so no oversubscription
+    splits = StratifiedKFold(folds, shuffle=True, random_state=0).split(X, y)
+    for te, (p, h) in Parallel(n_jobs=-1)(delayed(one)(tr, te) for tr, te in splits):
+        pos[te], hard[te] = p, h
     return pos, hard
 
 
