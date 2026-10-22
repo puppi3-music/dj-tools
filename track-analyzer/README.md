@@ -308,6 +308,8 @@ While loaded, Traktor shows per track:
 
 `native` puts back only those fields, so cue points, plays, History and tracks added meanwhile carry over. If you changed a genre, colour or Comment 2 yourself while the view was loaded, `native` keeps your change and lists it under `kept`. The clock always goes back to your tempo.
 
+While the view is loaded, `hype`, `stats` and `export` use the view's data (hype at the view tempo); add `--native` for each track at its own tempo.
+
 Safety while the view is loaded:
 - `traktor`, `traktor --undo`, `hype --traktor`, `colors apply` and `colors review --apply` refuse to run, so they can't mix your values into the view. `colors train` and `colors explain` refuse too: they read your colours from Traktor, and the view's shifted colours would skew them.
 - `load` refuses while Traktor writes tags to your files (Preferences → File Management; `FileAccess.TagsSerialization` in Traktor Settings.tsi), because Traktor could write the view's genres into them and `native` only restores the collection. `--force` loads anyway.
