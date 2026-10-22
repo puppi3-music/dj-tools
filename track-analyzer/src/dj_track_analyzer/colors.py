@@ -451,7 +451,10 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
     if scale and not b.get("cv"):
         raise SystemExit("This colour model is from before confidence was measured properly. "
                          "Retrain it: uv run dj-track-analyzer colors train")
+    keep_forever = _kept_forever()
     for i, d in enumerate(b["disagreements"]):
+        if apply and d["path"] in keep_forever:
+            continue  # plain review still lists them, marked "kept"
         pos = d["position"]
         # how often tracks placed here really were this colour or a neighbour of it
         conf = analysis.color_confidence(b, pos, COLOR_NAMES.index(d["sounds_like"]) + 1, within=1) if scale else None
@@ -464,6 +467,8 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
             if scale:
                 t["confidence"] = conf
             t["meets_apply_threshold"] = chosen
+            if d["path"] in keep_forever:
+                t["kept"] = True  # you answered "keep always": --apply leaves it alone
             t["path"] = d["path"]
             tracks.append(t)
     out = {"trained_at": b["trained_at"], "model": b.get("name"), "accuracy": b["metrics"],
@@ -475,6 +480,8 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
            "apply_threshold": {"min_gap": min_gap, "min_confidence": min_confidence,
                                "tracks_meeting_it": len(changes)},
            "tracks": tracks}
+    if keep_forever:
+        out["always_kept"] = len(keep_forever)
     if apply:
         if not scale:
             raise SystemExit("--apply needs a scale model (this one treats colours as classes).")
@@ -483,7 +490,9 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
                 raise SystemExit("Traktor is running. Quit Traktor first: it rewrites collection.nml when it "
                                  "closes and would undo these changes.")
             names = {t["path"]: t["file"] for t in tracks}
-            changes, out["kept_your_colour"] = _ask_each(changes, names)
+            asked = changes
+            changes, out["kept_your_colour"], forever = _ask_each(changes, names)
+            _keep_forever(forever, {p: old for p, (old, _new) in asked.items()})
         out["traktor"] = traktor.set_colors(changes, nml, dry_run=dry_run)
         if not dry_run and out["traktor"].get("changed"):
             out["undo"] = "uv run dj-track-analyzer traktor --undo"
@@ -493,29 +502,78 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
     return out
 
 
+def _kept_forever() -> set[str]:
+    """Tracks you answered "always keep" for: review --apply never suggests recolouring them again."""
+    con = collection.db()
+    con.execute("CREATE TABLE IF NOT EXISTS color_keep (path TEXT PRIMARY KEY, colour TEXT, at TEXT)")
+    return {r[0] for r in con.execute("SELECT path FROM color_keep")}
+
+
+def kept(forget: str | None = None, keep: str | None = None, nml: str | None = None) -> dict:
+    """The tracks you answered "always keep" for. forget: take the ones whose path contains this text
+    off the list, so review --apply can suggest them again. keep: add the coloured tracks whose path
+    contains this text, with their colour in Traktor now."""
+    _kept_forever()  # creates the table
+    out = {}
+    if keep:
+        _nml, colors, _n = read_traktor_colors(nml)
+        scanned = {r[0] for r in collection.db().execute("SELECT path FROM tracks")}  # one path per track
+        hits = {p: c for p, c in colors.items() if keep.lower() in p.lower() and p in scanned}
+        if not hits:
+            raise SystemExit(f'No coloured track in Traktor has "{keep}" in its path.')
+        if len(hits) > 10:  # a typo like "e" shouldn't quietly keep half the collection
+            raise SystemExit(f'"{keep}" matches {len(hits)} tracks; use more of the name.')
+        _keep_forever(list(hits), hits)
+        out["added"] = [{"file": Path(p).name, "your_colour": COLOR_NAMES[c - 1]} for p, c in hits.items()]
+    con = collection.db()
+    rows = [dict(r) for r in con.execute("SELECT path, colour, at FROM color_keep ORDER BY at, path")]
+    if forget:
+        gone = [r for r in rows if forget.lower() in r["path"].lower()]
+        con.executemany("DELETE FROM color_keep WHERE path=?", [(r["path"],) for r in gone])
+        con.commit()
+        out["forgotten"] = [Path(r["path"]).name for r in gone]
+        rows = [r for r in rows if r not in gone]
+    out["always_kept"] = [{"file": Path(r["path"]).name, "your_colour": r["colour"], "kept_since": r["at"],
+                           "path": r["path"]} for r in rows]
+    return out
+
+
+def _keep_forever(paths: list[str], olds: dict[str, int]) -> None:
+    if not paths:
+        return
+    con = collection.db()
+    con.execute("CREATE TABLE IF NOT EXISTS color_keep (path TEXT PRIMARY KEY, colour TEXT, at TEXT)")
+    now = time.strftime("%Y-%m-%d %H:%M")
+    con.executemany("INSERT OR REPLACE INTO color_keep VALUES (?, ?, ?)",
+                    [(p, COLOR_NAMES[olds[p] - 1], now) for p in paths])
+    con.commit()
+
+
 def _ask_each(changes: dict[str, tuple[int, int]], names: dict[str, str]):
-    """Ask about each recolour on the terminal: yes, no, all the rest, or cancel (nothing written).
-    Questions go to stderr so the JSON on stdout stays clean."""
+    """Ask about each recolour on the terminal: yes, no, keep always (never ask again), all the rest,
+    or cancel (nothing written). Questions go to stderr so the JSON on stdout stays clean."""
     import sys
 
-    keep, skipped, take_all = {}, [], False
+    keep, skipped, forever, take_all = {}, [], [], False
     for n, (p, (old, new)) in enumerate(changes.items(), 1):
         if not take_all:
             q = (f"[{n}/{len(changes)}] {names.get(p, Path(p).name)}\n"
-                 f"  {COLOR_NAMES[old - 1]} -> {COLOR_NAMES[new - 1]}?  [y]es / [n]o / [a]ll the rest / [c]ancel: ")
+                 f"  {COLOR_NAMES[old - 1]} -> {COLOR_NAMES[new - 1]}?  [y]es / [n]o / [k]eep always / [a]ll the rest / [c]ancel: ")
             while True:
                 print(q, end="", file=sys.stderr, flush=True)
                 a = (sys.stdin.readline() or "c").strip().lower()[:1]
-                if a in ("y", "n", "a", "c"):
+                if a in ("y", "n", "k", "a", "c"):
                     break
             if a == "c":
                 raise SystemExit("Cancelled, nothing changed.")
-            if a == "n":
+            if a in ("n", "k"):
                 skipped.append(names.get(p, Path(p).name))
+                if a == "k":
+                    forever.append(p)
                 continue
             take_all = a == "a"
         keep[p] = (old, new)
-    return keep, skipped
+    return keep, skipped, forever
 
 
 # ----------------------------------------------------------------------------

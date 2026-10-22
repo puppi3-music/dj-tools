@@ -191,7 +191,7 @@ td code { white-space: nowrap; }
         <div class="cmd"><pre>uv run dj-track-analyzer colors review --apply --dry-run</pre></div></li>
       <li>Quit Traktor, then:
         <div class="cmd"><pre>uv run dj-track-analyzer colors review --apply</pre></div>
-        It asks about each track: <b>y</b> recolours it, <b>n</b> keeps your colour, <b>a</b> recolours all the rest, <b>c</b> cancels without changing anything. Add <code>--yes</code> to skip the questions.</li>
+        It asks about each track: <b>y</b> recolours it, <b>n</b> keeps your colour, <b>k</b> keeps it and never asks about that track again, <b>a</b> recolours all the rest, <b>c</b> cancels without changing anything. Add <code>--yes</code> to skip the questions.</li>
       <li>Stricter: <code>--min-gap 3</code> or <code>--min-confidence 0.85</code>. Undo with <code>traktor --undo</code> before you open Traktor again (afterwards it refuses unless you add <code>--force</code>, which loses what Traktor saved).</li>
     </ol></li>
   <li>Then retrain, as in <a href="#recoloured">I recoloured a bunch of tracks</a>.</li>
@@ -360,6 +360,7 @@ td code { white-space: nowrap; }
 <tr><td><code>--min-confidence 0.3</code></td><td><code>colors apply</code></td><td>Only set the more reliable colour guesses (most are 0.2–0.3)</td></tr>
 <tr><td><code>--min-gap 2.5</code> / <code>--min-confidence 0.75</code></td><td><code>colors review --apply</code></td><td>Which disagreements get recoloured (these are the defaults)</td></tr>
 <tr><td><code>--yes</code></td><td><code>colors review --apply</code></td><td>Recolour them all without asking about each track</td></tr>
+<tr><td><code>--kept</code></td><td><code>colors review</code></td><td>Show the tracks you said to keep always. Add <code>--forget "name"</code> to let review suggest one again, or <code>--keep "name"</code> to add one yourself</td></tr>
 <tr><td><code>--no-deep</code></td><td><code>colors train</code></td><td>Skip the MAEST, mood and instrument features (faster, less accurate)</td></tr>
 <tr><td><code>--least</code> / <code>--gems</code></td><td><code>hype</code></td><td>Chill first / hype tracks with few stars or plays</td></tr>
 <tr><td><code>--colour Red</code>, <code>--bpm 126</code>, <code>--key 8A</code></td><td><code>hype</code></td><td>Filter by colour (yours, else predicted), BPM (±4%, change with <code>--bpm-tolerance</code>) and keys that mix with 8A</td></tr>

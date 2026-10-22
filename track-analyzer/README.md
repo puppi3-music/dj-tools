@@ -224,12 +224,15 @@ After training, every scan predicts a `color`, a `position` (5.4 = Blue leaning 
 | `--min-confidence` | `apply` / `review --apply` | Only set guesses at least this reliable | 0 / 0.75 |
 | `--min-gap 2.5` | `review --apply` | How many colours away from yours a track must sound | 2.5 |
 | `--yes` | `review --apply` | Recolour every qualifying track without asking about each one | off |
+| `--kept` | `review` | List the tracks on your keep-always list | off |
+| `--keep TEXT` | `review --kept` | Put the coloured tracks whose path contains TEXT on the keep-always list (10 matches at most) | — |
+| `--forget TEXT` | `review --kept` | Take tracks whose path contains TEXT off the keep-always list | — |
 | `--workers N` | `train`, `explain`, `apply` | Parallel workers for the deep listening pass | half your cores, max 5 |
 | `--no-deep` | `train` | Skip the MAEST/mood/instrument features (faster, less accurate) | off |
 | `--json` | `explain` | Raw numbers instead of tables | off |
 | `--nml <path>` | all | Another collection | newest Traktor folder |
 
-`review --apply` asks about each track first (yes / no / all the rest / cancel); `--yes` skips the questions, and they're skipped anyway when the input isn't a terminal. It skips tracks you've recoloured since training. `apply` and `review --apply` make the same backup as `traktor`, so **undo** is `traktor --undo` (Traktor closed).
+`review --apply` asks about each track first (yes / no / keep always / all the rest / cancel). **Keep always** (`k`) keeps your colour and puts the track on a keep-always list, so `review --apply` never suggests it again; plain `review` still lists it, marked `kept`. See the list with `colors review --kept`, add tracks with `--keep "<part of the name>"`, and put one back in play with `--forget "<part of the name>"`. The list lives in the analyzer's database, not in Traktor. `--yes` skips the questions, and they're skipped anyway when the input isn't a terminal. It skips tracks you've recoloured since training. `apply` and `review --apply` make the same backup as `traktor`, so **undo** is `traktor --undo` (Traktor closed).
 
 **`colors explain`** (first run adds about 10 minutes of analysis) shows, per colour: approachability, moods, instruments, vocals, drop height, intro length, breakdowns, BPM, loudness, key, length, median plays and share of purchased tracks, each with its correlation with your scale. Then your playlists sorted hard → pretty, how often each colour is played in the first, middle and last third of your sets (from Traktor's History), and how consistent each artist's colours are.
 

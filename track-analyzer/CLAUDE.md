@@ -88,7 +88,9 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
   that really had that colour (+5 pseudo-tracks of the overall rate). Bundles store `cv` (positions, truth);
   bundles without it → None (retrain). Typical 0.2-0.3. `review` uses within=1.
 - `colors review --apply` recolours CV disagreements with gap ≥ 2.5 and within-one confidence ≥ 0.75
-  (`traktor.set_colors`, skips tracks recoloured since). `read_traktor_colors` refuses while a tempo view is loaded (train, explain, apply). `colors apply`: scan --traktor (new only) → deep features
+  (`traktor.set_colors`, skips tracks recoloured since). Asks per track (y/n/k/a/c; `--yes` skips); `k` = keep always → collection.db `color_keep`, which
+  `--apply` skips. `colors review --kept [--keep|--forget TEXT]` shows/edits it (`--keep` alone is refused; ≤10 matches).
+  `read_traktor_colors` refuses while a tempo view is loaded (train, explain, apply, `--keep`). `colors apply`: scan --traktor (new only) → deep features
   for uncoloured → refresh predictions → `traktor.sync(update_genres=False, make_smartlists=False)`.
 - `colors explain`: per-colour profile + playlists + History set position + artist consistency (read-only).
 
