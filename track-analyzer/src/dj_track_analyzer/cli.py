@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from .analysis import (analyze_file, check_rules, download_models, log, split_style, style_classes,
@@ -108,6 +109,8 @@ def main() -> None:
                          "review --apply: only recolour tracks at or above it (default 0.75)")
     co.add_argument("--apply", action="store_true",
                     help="review: recolour the tracks over the thresholds in Traktor (Traktor closed; backup + traktor --undo)")
+    co.add_argument("--yes", action="store_true",
+                    help="review --apply: recolour every track over the thresholds without asking about each one")
     co.add_argument("--min-gap", type=float, default=2.5,
                     help="review --apply: only recolour tracks this many colours away from yours or more (default 2.5)")
     co.add_argument("--json", action="store_true", help="explain: print JSON instead of tables")
@@ -219,7 +222,7 @@ def main() -> None:
         else:
             out = colors.review(apply=args.apply, dry_run=args.dry_run, min_gap=args.min_gap,
                                 min_confidence=0.75 if args.min_confidence is None else args.min_confidence,
-                                nml=args.nml)
+                                nml=args.nml, ask=sys.stdin.isatty() and not args.yes)
         print(json.dumps(out, indent=2, ensure_ascii=False))
         if args.action == "apply" or args.apply:
             say_if_nothing(out, args.dry_run)

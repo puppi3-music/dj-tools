@@ -223,12 +223,13 @@ After training, every scan predicts a `color`, a `position` (5.4 = Blue leaning 
 | `--dry-run` | `apply`, `review --apply` | Show which colours would be set | off |
 | `--min-confidence` | `apply` / `review --apply` | Only set guesses at least this reliable | 0 / 0.75 |
 | `--min-gap 2.5` | `review --apply` | How many colours away from yours a track must sound | 2.5 |
+| `--yes` | `review --apply` | Recolour every qualifying track without asking about each one | off |
 | `--workers N` | `train`, `explain`, `apply` | Parallel workers for the deep listening pass | half your cores, max 5 |
 | `--no-deep` | `train` | Skip the MAEST/mood/instrument features (faster, less accurate) | off |
 | `--json` | `explain` | Raw numbers instead of tables | off |
 | `--nml <path>` | all | Another collection | newest Traktor folder |
 
-`review --apply` skips tracks you've recoloured since training. `apply` and `review --apply` make the same backup as `traktor`, so **undo** is `traktor --undo` (Traktor closed).
+`review --apply` asks about each track first (yes / no / all the rest / cancel); `--yes` skips the questions, and they're skipped anyway when the input isn't a terminal. It skips tracks you've recoloured since training. `apply` and `review --apply` make the same backup as `traktor`, so **undo** is `traktor --undo` (Traktor closed).
 
 **`colors explain`** (first run adds about 10 minutes of analysis) shows, per colour: approachability, moods, instruments, vocals, drop height, intro length, breakdowns, BPM, loudness, key, length, median plays and share of purchased tracks, each with its correlation with your scale. Then your playlists sorted hard → pretty, how often each colour is played in the first, middle and last third of your sets (from Traktor's History), and how consistent each artist's colours are.
 

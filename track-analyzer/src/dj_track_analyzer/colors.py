@@ -430,10 +430,10 @@ def refresh_predictions(con, traktor_colors: dict[str, int] | None = None, progr
 
 
 def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap: float = 2.5,
-           min_confidence: float = 0.75, nml: str | None = None) -> dict:
+           min_confidence: float = 0.75, nml: str | None = None, ask: bool = False) -> dict:
     """apply=True recolours, in Traktor, the reviewed tracks with gap >= min_gap and confidence >=
     min_confidence to the colour they sound like. Uses the cross-validated predictions (made without
-    seeing the track's own colour), not the final model's."""
+    seeing the track's own colour), not the final model's. ask=True asks about each track first."""
     b = analysis.color_model()
     if b is None:
         raise SystemExit("No colour model yet. Run: uv run dj-track-analyzer colors train")
@@ -446,7 +446,7 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
         pos = d["position"]
         # how often tracks placed here really were this colour or a neighbour of it
         conf = analysis.color_confidence(b, pos, COLOR_NAMES.index(d["sounds_like"]) + 1, within=1) if scale else None
-        chosen = scale and d["gap"] >= min_gap and conf >= min_confidence
+        chosen = bool(scale and d["gap"] >= min_gap and conf >= min_confidence)  # numpy bool isn't JSON
         if chosen:
             changes[d["path"]] = (COLOR_NAMES.index(d["your_colour"]) + 1, COLOR_NAMES.index(d["sounds_like"]) + 1)
         if (chosen if apply else i < limit):  # --apply lists only the tracks it would recolour
@@ -469,6 +469,12 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
     if apply:
         if not scale:
             raise SystemExit("--apply needs a scale model (this one treats colours as classes).")
+        if ask and changes and not dry_run:
+            if traktor.traktor_running():  # say so before the questions, not after them
+                raise SystemExit("Traktor is running. Quit Traktor first: it rewrites collection.nml when it "
+                                 "closes and would undo these changes.")
+            names = {t["path"]: t["file"] for t in tracks}
+            changes, out["kept_your_colour"] = _ask_each(changes, names)
         out["traktor"] = traktor.set_colors(changes, nml, dry_run=dry_run)
         if not dry_run and out["traktor"].get("changed"):
             out["undo"] = "uv run dj-track-analyzer traktor --undo"
@@ -476,6 +482,31 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
         out["apply_hint"] = (f"uv run dj-track-analyzer colors review --apply --dry-run  (previews recolouring the "
                              f"{len(changes)} tracks with gap >= {min_gap} and confidence >= {min_confidence})")
     return out
+
+
+def _ask_each(changes: dict[str, tuple[int, int]], names: dict[str, str]):
+    """Ask about each recolour on the terminal: yes, no, all the rest, or cancel (nothing written).
+    Questions go to stderr so the JSON on stdout stays clean."""
+    import sys
+
+    keep, skipped, take_all = {}, [], False
+    for n, (p, (old, new)) in enumerate(changes.items(), 1):
+        if not take_all:
+            q = (f"[{n}/{len(changes)}] {names.get(p, Path(p).name)}\n"
+                 f"  {COLOR_NAMES[old - 1]} -> {COLOR_NAMES[new - 1]}?  [y]es / [n]o / [a]ll the rest / [c]ancel: ")
+            while True:
+                print(q, end="", file=sys.stderr, flush=True)
+                a = (sys.stdin.readline() or "c").strip().lower()[:1]
+                if a in ("y", "n", "a", "c"):
+                    break
+            if a == "c":
+                raise SystemExit("Cancelled, nothing changed.")
+            if a == "n":
+                skipped.append(names.get(p, Path(p).name))
+                continue
+            take_all = a == "a"
+        keep[p] = (old, new)
+    return keep, skipped
 
 
 # ----------------------------------------------------------------------------
