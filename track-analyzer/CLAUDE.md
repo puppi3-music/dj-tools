@@ -176,3 +176,16 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
 - Colour model: hype as a feature; approachability/energy-arc alone over MAEST+sound; direct distortion measures
   (flatness, dissonance, crest, 2-5 kHz, clipping: flat across colours); MOSS-Music-8B 1-10 ratings (AUC 0.39-0.55
   vs 0.63 for the model, ~45 s/track).
+- Colour model, for "pretty vocal/melody over a driving beat" and "hard drops diluted by the average": weighting
+  vocals / moods / melodic instruments up (x2-x30); per-section features (EffNet heads per window: loudest-quarter vs
+  quiet means, p90/p10/std, vocals while loud; EffNet sound of the loudest quarter). On the test collection
+  0.94 per-colour error at best vs 0.94 now, worse with all 242 section stats (up to 1.05). The heads tell that a
+  vocal is there, not that it's beautiful. Untried: MAEST per section (hours of compute).
+- Colour model: blending the scale model's position with the classes model's expected colour (0.25-0.75): 0.93-1.02
+  per-colour error vs 0.92 for the scale model alone. The classes model is worst at the ends (Magenta 1.47 vs 1.11)
+  with ~35 tracks per end colour.
+  Averaging the top scale models (descriptors weighted ± calibrated, + MAEST+instruments / MAEST+sound): 0.92-0.97
+  vs 0.92. The scale models make the same mistakes, and every blend pulls the ends back toward the middle.
+  Stacking all 17 candidates (nested CV): plain average 1.03; learned non-negative weights 0.913 vs 0.919 but
+  within-one 80% vs 83% and plain average error 0.92 vs 0.89 (trades Red 0.89 → 1.10 for Magenta 1.11 → 0.90);
+  Caruana ensemble selection 0.920 (picks the calibrated model 84%).
