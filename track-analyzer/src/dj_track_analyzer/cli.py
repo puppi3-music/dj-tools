@@ -58,6 +58,21 @@ def main() -> None:
     a = sub.add_parser("analyze", help="analyze one file and print JSON")
     a.add_argument("file")
     a.add_argument("--segments", type=float, default=None, help="timeline segment length in seconds")
+    a.add_argument("--tracklist", nargs="?", const="auto", default=None, metavar="HISTORY.nml",
+                   help="for a recorded mix: check it against Traktor's history file of that session "
+                        "(default: found from the recording's date)")
+    a.add_argument("--chapters", action="store_true",
+                   help="with --tracklist: YouTube chapter lines for the video's description (needs --offset)")
+    a.add_argument("--offset", default=None, metavar="SECONDS",
+                   help="how far into the finished video the first track starts (14 or 0:14; read it off the video), "
+                        "for --chapters and --highlights times")
+    a.add_argument("--highlights", nargs="?", type=int, const=2, default=0, metavar="N",
+                   help="for a mix: suggest the N best stretches for short clips (default 2)")
+    a.add_argument("--clip-length", type=float, default=40.0, metavar="SECONDS",
+                   help="length of each --highlights clip (default 40)")
+    a.add_argument("--json-only", action="store_true", help="for a mix: leave out the readable summary after the JSON")
+    a.add_argument("--start", default=None, metavar="HH:MM:SS",
+                   help="with --tracklist: when the recording started (read from Traktor's recording name if left out)")
     sc = sub.add_parser("scan", help="analyze a whole collection (resumable), save to database + spreadsheet")
     sc.add_argument("folders", nargs="*", help="folders (or files) to scan")
     sc.add_argument("--traktor", action="store_true", help="scan every track in Traktor's collection (can be combined with folders)")
@@ -176,7 +191,31 @@ def main() -> None:
         print("\n".join(sorted(set(names))))
         check_rules()
     elif args.cmd == "analyze":
-        print(json.dumps(analyze_file(args.file, args.segments, progress=True), indent=2, ensure_ascii=False))
+        tracklist = None
+        if args.chapters and not args.tracklist:
+            raise SystemExit("--chapters needs --tracklist (the chapters are the tracks you played)")
+        if args.chapters and args.offset is None:
+            raise SystemExit("--chapters needs --offset: how many seconds into the finished video the first "
+                             "track starts (check it in your video editor), e.g. --offset 0:14")
+        if args.tracklist:
+            from .tracklist import prepare
+
+            tracklist = prepare(args.file, args.tracklist, args.start)
+        result = analyze_file(args.file, args.segments, progress=True, tracklist=tracklist,
+                              highlights=args.highlights, clip_seconds=args.clip_length)
+        if result.get("type") == "dj_mix":
+            from . import tracklist as tl
+
+            offset = tl.parse_offset(args.offset) if args.offset is not None else None
+            if args.chapters:
+                result["chapters"] = tl.chapters(result, offset)
+            tl.describe_highlights(result, offset)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        if result.get("type") == "dj_mix" and not args.json_only:
+            from .tracklist import summary
+
+            sys.stdout.flush()
+            log("\n" + summary(result))
     elif args.cmd == "train":
         print(json.dumps(train(args.folder), indent=2, ensure_ascii=False))
     elif args.cmd == "scan":

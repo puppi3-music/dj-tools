@@ -44,6 +44,18 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
 - `hype.py`: `hype` command (find by hype, filters, gems, `--traktor` → Comment 2).
 - `tempo.py`: `tempo` command, the catalogue as heard at one tempo (default 145, `--bpm` for any).
 - `lexicon.py`: `tempo load/native --lexicon` via Lexicon's Local API.
+- `tracklist.py`: `analyze <mix> --tracklist`: Traktor history NML (COLLECTION entries joined to PLAYLIST
+  ENTRY/PRIMARYKEY KEY = VOLUME+DIR+FILE; EXTENDEDDATA STARTDATE = y<<16|m<<8|d, STARTTIME = seconds of day,
+  DURATION = deck run time, which includes faded-out tails, so plays overlap ~70% of a mix). Recording start from
+  Traktor's `Recording_YYYY-MM-DD_HHhMMmSSs` name or `--start`. Main stretch = start → next start, shifted by a
+  measured blend lag (0-150 s, the one where most keys match), middle 60% judged. Key lock on unless off wins by
+  ≥2 tracks. Sped >4%: genre = mix acts at played BPM with PSY_GATE vs native acts per track
+  (speed-up and stems/effects both really change the genre, only the psy shortcut is
+  removed; earlier "native + (mix − view)" and "library genres by time" were dropped). `mixing` = mix − view
+  acts. Fields `*_uncorrected` = no gate. `--chapters`/`--highlights`/`--offset`: video time = recording time −
+  first track's start (`anchor()`; `first_sound_seconds` without a tracklist) + offset, offset read off the
+  finished video by the user (required for --chapters; never guessed from the audio); highlights from 1 s means
+  of EBU short-term loudness, level + 0.5·rise (capped 8 LU), windows touching < −45 LUFS skipped. Missing data → SystemExit saying how to get it.
 - `dj_genres.json`: maps Discogs styles to DJ genre names (rules with "needs" groups + BPM range); a user copy in
   `data/dj_genres.json` wins.
 
@@ -74,7 +86,9 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
   Cached in cache.db `deep.instruments`; `deep_features` adds them without recomputing MAEST.
 - Extras (deep.extra JSON): approachability/engagement regression heads (`model/Identity`, whole track) +
   `energy_arc()` from short-term loudness.
-- Files > 12 min are DJ mixes → timeline per 2-min segment.
+- Files > 12 min are DJ mixes → timeline per 2-min segment (`--tracklist` adds a per-track check). Their BPM/key
+  measurements run in `analysis.AudioPool` (spawn workers as `scan`, audio via a memory-mapped .npy, worker
+  stdout → stderr for MCP); output identical to serial, 121 → 71 s on a 65-min mix.
 
 ### Colour
 - Traktor INFO COLOR 1..7 = Red, Orange, Yellow, Green, Blue, Violet, Magenta. Treated as an ordered scale; labels

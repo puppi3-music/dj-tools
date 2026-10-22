@@ -1147,8 +1147,10 @@ def track_embedding(p: Path):
 
 def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool = True,
                  genre_bpm: float | None = None, tempo: tuple[float, float] | None = None,
-                 progress: bool = False) -> dict:
-    """genre_bpm: a BPM to judge the genre rules by instead of the measured one (scan passes
+                 progress: bool = False, tracklist: tuple | None = None, highlights: int = 0,
+                 clip_seconds: float = 40.0) -> dict:
+    """tracklist: (plays, history path, recording start) from tracklist.py, for a mix: adds a per-track
+    report and judges genres at the tracks' own BPMs. genre_bpm: a BPM to judge the genre rules by instead of the measured one (scan passes
     Traktor's, which the user may have corrected by hand). tempo: (track's BPM, BPM to play it at)
     analyses the track sped up / slowed down with key lock (`tempo scan`). progress: print the stage
     being worked on to stderr (the `analyze` command)."""
@@ -1174,6 +1176,14 @@ def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool
     say("measuring loudness")
     short, lufs, lra = loudness(stereo, sr)
     result["loudness"] = {"integrated_lufs": round(lufs, 1), "loudness_range_lu": round(lra, 1)}
+    if is_mix:
+        from . import tracklist as tl
+
+        # where a silence-trimmed copy (FLAC/MP3) starts; only a fallback anchor for video times without a
+        # tracklist. Where the music starts in the video is the user's --offset, read off the finished video.
+        result["first_sound_seconds"] = round(tl.first_sound(mono44), 2)
+        if highlights:
+            result["highlights"] = tl.highlights(short, duration, highlights, clip_seconds)
 
     if not is_mix and tempo:
         # Stretched to a known tempo: no need to measure it. The colour model below gets the track's
@@ -1244,18 +1254,90 @@ def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool
             if col:
                 result["color"] = col
     except RuntimeError as err:
-        emb = acts = None
+        emb = acts = scores = None
         result["styles_error"] = str(err)
 
-    if segment_seconds:
-        say("building the timeline")
-        result["timeline"] = segment_timeline(mono44, short, emb, acts, duration, segment_seconds, progress)
+    if segment_seconds or (tracklist and is_mix):
+        with AudioPool(mono44) as pool:
+            if segment_seconds:
+                say(f"building the timeline ({pool.workers} processes)")
+                result["timeline"] = segment_timeline(mono44, short, emb, acts, duration, segment_seconds, pool=pool)
+            if tracklist and is_mix:
+                from . import tracklist as tl
+
+                say("checking against the tracklist")
+                tl.check(result, pool, acts, scores, duration, *tracklist)
 
     result["analysis_seconds"] = round(time.time() - t0, 1)
     return result
 
 
-def segment_timeline(mono44, short, emb, acts, duration, seg_sec, progress=False):
+# BPM and key of stretches of one long recording (a mix's timeline segments, its tracks), measured in
+# parallel processes. The audio goes to the workers as a memory-mapped file, not one copy each.
+_AUDIO: dict[str, np.ndarray] = {}
+
+
+def _audio_pool_init(npy: str) -> None:
+    import signal
+
+    signal.signal(signal.SIGINT, signal.SIG_IGN)  # let the parent handle Ctrl-C
+    os.dup2(2, 1)  # stray library output to stderr: stdout may be the MCP channel
+    es()
+    _AUDIO["mono44"] = np.load(npy, mmap_mode="r")
+
+
+def _measure(job: tuple[float, float, bool, bool]) -> dict:
+    """job: (start s, end s, want BPM, want key) -> {"bpm": raw BPM, "key": (key, scale, strength)}."""
+    a, b, want_bpm, want_key = job
+    x = np.ascontiguousarray(_AUDIO["mono44"][int(a * 44100): int(b * 44100)], dtype=np.float32)
+    out = {}
+    if want_bpm:
+        try:
+            out["bpm"] = rhythm(x)[0]
+        except Exception:
+            pass
+    if want_key:
+        out["key"] = key_of(x)
+    return out
+
+
+class AudioPool:
+    """`with AudioPool(mono44) as pool: pool.measure(jobs)`. One process when parallel wouldn't pay."""
+
+    def __init__(self, mono44: np.ndarray, workers: int | None = None):
+        self.mono44 = mono44
+        self.workers = workers or max(1, min(5, (os.cpu_count() or 4) // 2))  # as `scan`
+        self._pool = self._dir = None
+
+    def __enter__(self):
+        if self.workers > 1:
+            import multiprocessing as mp
+            import tempfile
+
+            self._dir = tempfile.mkdtemp(prefix="track-analyzer-")
+            npy = os.path.join(self._dir, "mono44.npy")
+            np.save(npy, self.mono44.astype(np.float32, copy=False))
+            self._pool = mp.get_context("spawn").Pool(self.workers, initializer=_audio_pool_init, initargs=(npy,))
+        return self
+
+    def measure(self, jobs: list[tuple[float, float, bool, bool]]) -> list[dict]:
+        if self._pool is None or len(jobs) < 2:
+            _AUDIO["mono44"] = self.mono44
+            return [_measure(j) for j in jobs]
+        return self._pool.map(_measure, jobs, chunksize=1)
+
+    def __exit__(self, exc_type, *_):
+        if self._pool is not None:
+            (self._pool.terminate if exc_type else self._pool.close)()
+            self._pool.join()
+        if self._dir:
+            import shutil
+
+            shutil.rmtree(self._dir, ignore_errors=True)
+        _AUDIO.pop("mono44", None)
+
+
+def segment_timeline(mono44, short, emb, acts, duration, seg_sec, pool: AudioPool | None = None):
     """Per-segment BPM, key, loudness and style: useful for DJ mixes."""
     timeline = []
     n_seg = max(1, int(np.ceil(duration / seg_sec)))
@@ -1265,20 +1347,15 @@ def segment_timeline(mono44, short, emb, acts, duration, seg_sec, progress=False
         import joblib
 
         model = joblib.load(GENRE_MODEL)["model"]
-    for i in range(n_seg):
-        start, end = i * seg_sec, min(duration, (i + 1) * seg_sec)
-        if end - start < 20:
-            break
-        if progress:
-            log(f"  segment {i + 1}/{n_seg}")
-        a = mono44[int(start * 44100): int(end * 44100)]
+    spans = [(i * seg_sec, min(duration, (i + 1) * seg_sec)) for i in range(n_seg)]
+    spans = [(a, b) for a, b in spans if b - a >= 20]
+    jobs = [(a, b, True, True) for a, b in spans]
+    measured = pool.measure(jobs) if pool else AudioPool(mono44, workers=1).measure(jobs)
+    for (start, end), m in zip(spans, measured):
         seg = {"start": fmt_time(start), "end": fmt_time(end)}
-        try:
-            raw_bpm, _conf, _n = rhythm(a)
-            seg["bpm"] = round_bpm(fold_bpm(raw_bpm))
-        except Exception:
-            pass
-        k, s, _st = key_of(a)
+        if "bpm" in m:
+            seg["bpm"] = round_bpm(fold_bpm(m["bpm"]))
+        k, s, _st = m["key"]
         seg["key"] = f"{k} {s}"
         seg["camelot"] = camelot(k, s)
         if len(short):

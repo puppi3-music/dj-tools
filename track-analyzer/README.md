@@ -18,7 +18,7 @@ For every MP3, WAV, FLAC, AIFF or M4A:
 | **Mood, instruments, vocals** | Aggressive / happy / party / relaxed / sad, the strongest instruments, and how much of the track has a voice. |
 | **Colour** | A Traktor colour for uncoloured tracks, learned from the tracks you've already coloured (Traktor's 7 colours read as a scale, Red … Magenta). |
 | **Hype** | 1–10 within your collection, from the rave sound and energy. |
-| **DJ mixes** | Files over 12 minutes get a timeline in 2-minute segments. |
+| **DJ mixes** | Files over 12 minutes get a timeline in 2-minute segments. With `--tracklist`, a recorded mix is checked track by track against Traktor's history of that session. |
 
 When a track is in your Traktor collection, Traktor's own BPM and key are stored too, and they win for search, mix suggestions, hype filters and tag writes (you may have fixed the beatgrid by hand).
 
@@ -72,6 +72,50 @@ Under `genre_basis` it should say `"models": "EffNet + MAEST"`. If it says only 
 - **Model server unreachable?** `setup` tries a few ways, then prints a download link for each file it couldn't get. Open them in a browser, drop the files into `data/models/`, and run `setup` again to confirm.
 - **Speed.** The first run takes a few extra seconds while TensorFlow loads; after that a typical track takes about 10–15 seconds on an M1 Pro Mac (MAEST is about half of that).
 - **Requirements.** Apple Silicon with macOS 11 or newer, or an Intel Mac with macOS 14 or newer.
+
+### Checking a recorded mix
+
+```bash
+uv run dj-track-analyzer analyze ~/path/Recording_2026-01-31_22h00m00s.wav --tracklist
+```
+
+Traktor saves a history file for every session (`Documents/Native Instruments/Traktor x/History/`): each
+track played, on which deck, when it started. Its own recordings are named after the time they started, so
+`--tracklist` finds the right history file and places each track in the recording. For a recording with
+another name add `--start 22:00:00`; to use a particular history file, pass its path after `--tracklist`.
+If no history file covers the recording, it says so: Traktor writes the file when it closes.
+
+After the JSON, a mix gets a readable summary (genre, tempo, loudness, mood, key lock, a table of the tracks
+with their keys and genres, and the timeline's genres); `--json-only` leaves it out. In the JSON, under
+`tracklist`, per track:
+
+- **Key:** Traktor's key against the key heard in the middle of the track's main stretch (from its start to
+  the next track's start). Long blends and effects are normal, so the tool measures how long after Traktor
+  logs a start a track takes over (`blend_lag_seconds`) as the delay at which most keys match. A mismatch
+  can still be the other deck; a track with under 30 s of its own gets no verdict.
+- **Key lock:** history files don't record it. It's taken as on, unless the keys fit the pitch-shifted
+  keys (key lock off) clearly better.
+- **Tempo:** the track's own BPM, the BPM it was played at and the change (`speed`).
+- **Genre:** how the mix sounds as played, at the BPM you played it: speeding a track up and your mixing
+  (stems, layers, effects) both really change it, and both count. Only one thing is held back: sped up, the
+  models hear psytrance in almost any four-on-the-floor (a pop track at 145 gets called psytrance). As in the
+  tempo view (section 6), psy counts only up to 1.5× what each track had at its own tempo, so scan the tracks
+  first. With a tempo view near the mix's tempo (`tempo scan`), `mixing` lists the styles your mixing pushed
+  up or down against each track alone at that tempo (part of that can be the other deck still playing).
+  The label without the psy limit is kept as `dj_genre_uncorrected` (also per track and timeline segment),
+  and the library's genre per track as `library_genre`.
+
+**Posting the mix as a video:** `--chapters --offset 0:14` prints YouTube chapters for a video where the
+first track starts 0:14 in. Read that off the finished video itself: it depends on how you lined the audio
+up, so it can't come from the recording. The video's opening becomes an "Intro" chapter at 0:00, and very
+short plays fold into the next chapter (YouTube wants at least three, 10 s apart). `--highlights` suggests
+two 40-second stretches for short clips (loud, rising out of something quieter; loudness only, so pick by
+eye and snap to a bar), in video times with `--offset`. Trimming silence off the audio file doesn't change
+the times: they're counted from the first track's start.
+
+On a test mix of 22 house and melodic techno tracks, all sped up 12-20% with stems layered, 12 keys matched
+Traktor's and 1 was one step away. Without the tracklist the mix was called Psytrance (0.59); with it, Trance,
+Tech Trance and Psytrance at 0.13-0.16 each: a trance blend, with psy only where the tracks already leaned that way.
 
 ---
 
@@ -486,7 +530,10 @@ You get an accuracy estimate per genre and the pairs it confuses most (`Hard Tra
 | Command | What it does | Changes |
 |---|---|---|
 | `setup [--no-maest]` | Download or check the models | model files |
-| `analyze <file> [--segments 60]` | One track as JSON; mixes get a timeline (`--segments`: step in seconds) | nothing |
+| `analyze <file> [--segments 60] [--json-only]` | One track as JSON; mixes get a timeline (`--segments`: step in seconds) and a readable summary after the JSON, on stderr (`--json-only` leaves it out) | nothing |
+| `analyze <mix> --highlights [N] [--clip-length 40] [--offset 0:14]` | Suggest the N (default 2) best stretches of a mix for short clips: loud, starting where the music rises out of something quieter. With `--offset` (how far into the finished video the first track starts, read off the video), times are given in the video | nothing |
+| `analyze <mix> --tracklist --chapters --offset 0:14` | YouTube chapter lines from the tracklist, timed for a video where the first track starts at `--offset` | nothing |
+| `analyze <mix> --tracklist [history.nml] [--start HH:MM:SS]` | A recorded mix checked against Traktor's history file: each track's key heard vs Traktor's, the tempo it was played at, key lock, and the mix's genre with the psy-at-speed habit held back (see [Checking a recorded mix](#checking-a-recorded-mix)) | nothing |
 | `scan` | Analyse a collection (section 2) | app database, CSV |
 | `stats` | Summary of the scanned collection | nothing |
 | `export [file]` | Write the CSV again | CSV |

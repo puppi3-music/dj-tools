@@ -270,7 +270,9 @@ td code { white-space: nowrap; }
 
 <h3 id="one-track">Looking at one track</h3>
 <div class="cmd"><pre>uv run dj-track-analyzer analyze "/path/to/track.mp3"</pre></div>
-<p>To get the path: in Finder, hold <b>Option</b>, right-click the file and choose <b>Copy "…" as Pathname</b>. Keep the quotes around it. Files over 12 minutes are treated as DJ mixes and get a timeline in 2-minute steps (<code>--segments 60</code> for 1-minute steps).</p>
+<p>To get the path: in Finder, hold <b>Option</b>, right-click the file and choose <b>Copy "…" as Pathname</b>. Keep the quotes around it. Files over 12 minutes are treated as DJ mixes: they get a timeline in 2-minute steps and a readable summary after the JSON (<code>--segments 60</code> for 1-minute steps).</p>
+<p><b>Checking a recorded mix against what you played:</b> add <code>--tracklist</code> to a Traktor recording. It finds that session's history file, places each track in the recording, and shows per track the key Traktor has against the key heard, the tempo you played it at, whether key lock was on, and names the mix by how it sounds as played, with the speed-up and your mixing (stems, layers, effects) counted. Only the models' habit of calling almost any sped-up track psytrance is held back, as in the tempo view, so scan the tracks first. With <code>tempo scan</code> at about the tempo you played, it also lists what your mixing pushed up or down. For a recording Traktor didn't name, add <code>--start 22:00:00</code> (when it began).</p>
+<p><b>Posting it as a video:</b> add <code>--chapters --offset 0:14</code> (how far into the finished video the first track starts: check it in the video itself) for YouTube chapters to paste into the description, and <code>--highlights</code> for two suggested 40-second clips, in video times.</p>
 
 <h3 id="llm">Asking a local LLM about my music</h3>
 <ol>
@@ -344,6 +346,11 @@ td code { white-space: nowrap; }
 <tr><td><code>--write-tags genre</code></td><td><code>scan</code></td><td>Tag the files right after scanning (same fields as <code>--fields</code>)</td></tr>
 <tr><td><code>--workers 3</code></td><td><code>scan</code>, <code>colors train</code> / <code>explain</code> / <code>apply</code>, <code>tempo scan</code></td><td>Fewer or more parallel workers (default: half your CPU cores, at most 5)</td></tr>
 <tr><td><code>--segments 60</code></td><td><code>analyze</code></td><td>Timeline step in seconds</td></tr>
+<tr><td><code>--tracklist [history.nml]</code></td><td><code>analyze</code></td><td>Check a recorded mix against Traktor's history of that session (found automatically if no file given)</td></tr>
+<tr><td><code>--chapters --offset 0:14</code></td><td><code>analyze --tracklist</code></td><td>YouTube chapter lines, for a video where the first track starts 14 seconds in (read it off the finished video)</td></tr>
+<tr><td><code>--highlights</code> / <code>--clip-length 40</code></td><td><code>analyze</code> (mix)</td><td>Suggest 2 (or N) of the best 40-second stretches for short clips; video times with <code>--offset</code></td></tr>
+<tr><td><code>--json-only</code></td><td><code>analyze</code></td><td>For a mix, leave out the readable summary printed after the JSON</td></tr>
+<tr><td><code>--start 22:00:00</code></td><td><code>analyze --tracklist</code></td><td>When the recording began, for recordings not named by Traktor</td></tr>
 <tr><td><code>--multi</code></td><td><code>tag</code></td><td>Two or three genres when a track sits between them: <code>Acid Trance; Hard Trance</code></td></tr>
 <tr><td><code>--multi-ratio 0.7</code> / <code>--max-genres 3</code></td><td><code>tag --multi</code></td><td>How close a runner-up must score (share of the top score) / the most genres per track</td></tr>
 <tr><td><code>--fields genre,bpm,camelot</code></td><td><code>tag</code></td><td>Also write BPM and key. Fields: <code>genre</code>, <code>bpm</code>, <code>key</code> (Am…) or <code>camelot</code> (8A…), not both</td></tr>
