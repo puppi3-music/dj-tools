@@ -119,6 +119,7 @@ td code { white-space: nowrap; }
   <a href="#commands">All commands</a>
   <a href="#options">Options</a>
   <a href="#results">Reading the results</a>
+  <a href="#how">How it works</a>
   <a href="#undo">Undo and safety</a>
   <a href="#storage">Where things are stored</a>
   <a href="#trouble">When something goes wrong</a>
@@ -126,7 +127,7 @@ td code { white-space: nowrap; }
 
 <main>
 <h1>How to use DJ Track Analyzer</h1>
-<p class="lede">What to run, what you'll see, how to read it and how to undo it. Installation, every option and how the analysis works are in <a href="https://github.com/puppi3-music/dj-tools/blob/main/track-analyzer/README.md">README.md</a>; ideas for later are in <a href="https://github.com/puppi3-music/dj-tools/blob/main/track-analyzer/docs/IDEAS.md">IDEAS.md</a>.</p>
+<p class="lede">What to run, what you'll see, how to read it and how to undo it. Installation and every option are in <a href="https://github.com/puppi3-music/dj-tools/blob/main/track-analyzer/README.md">README.md</a>; ideas for later are in <a href="https://github.com/puppi3-music/dj-tools/blob/main/track-analyzer/docs/IDEAS.md">IDEAS.md</a>.</p>
 
 <div class="scale" aria-label="Colour scale from Red to Magenta">
   <div style="background:var(--red)">Red<small>1</small></div><div style="background:var(--orange)">Orange<small>2</small></div><div style="background:var(--yellow)">Yellow<small>3</small></div><div style="background:var(--green)">Green<small>4</small></div><div style="background:var(--blue)">Blue<small>5</small></div><div style="background:var(--violet)">Violet<small>6</small></div><div style="background:var(--magenta)">Magenta<small>7</small></div>
@@ -186,7 +187,7 @@ td code { white-space: nowrap; }
   <li>Listen to the tracks at the top of the list in Traktor, and recolour the ones you agree are off.</li>
   <li>Or let the app recolour only the clearest cases. A track qualifies when the model puts it at least 2.5 colours away from yours, and tracks it placed at that spot really were that colour or a neighbour at least 75% of the time. Those show <code>meets_apply_threshold: true</code>.
     <ol>
-      <li>Preview:
+      <li>Preview. This lists only the tracks that would be recoloured:
         <div class="cmd"><pre>uv run dj-track-analyzer colors review --apply --dry-run</pre></div></li>
       <li>Quit Traktor, then:
         <div class="cmd"><pre>uv run dj-track-analyzer colors review --apply</pre></div></li>
@@ -263,7 +264,7 @@ td code { white-space: nowrap; }
   <li>Not sure which is loaded?
     <div class="cmd"><pre>uv run dj-track-analyzer tempo status</pre></div></li>
 </ol>
-<div class="note"><p><b>Keep in mind:</b> the genre, mood and instrument models learned from millions of tracks, each at the tempo it was released at. Almost no house was released at 145, so stretched to 145 a rolling house track sounds to them like the trance and psytrance they <i>did</i> hear at that tempo. Read the view as how the models hear the sped-up track, not as facts. Psytrance, the worst case, is held back: in the view, psy only counts as much as the track already had at its own tempo, so most tracks that turn trancey become Progressive Trance or Trance instead. Rubber Band also isn't Traktor's own stretcher, so it sounds close but not identical. While the view is loaded, <code>traktor</code>, <code>traktor --undo</code>, <code>hype --traktor</code>, <code>colors apply</code> and <code>colors review --apply</code> refuse to run. Tested 2026-10-22: a full-collection <code>tempo scan</code> (471 tracks), and loading a view into real Traktor and switching back. Not yet confirmed in real Traktor: that tracks stay in their @145 Smartlists after loading them into a deck.</p></div>
+<div class="note"><p><b>Keep in mind:</b> the genre, mood and instrument models learned from millions of tracks, each at the tempo it was released at. Almost no house was released at 145, so stretched to 145 a rolling house track sounds to them like the trance and psytrance they <i>did</i> hear at that tempo. Read the view as how the models hear the sped-up track, not as facts. Psytrance, the worst case, is held back: in the view, psy only counts as much as the track already had at its own tempo, so most tracks that turn trancey become Progressive Trance or Trance instead. Rubber Band also isn't Traktor's own stretcher, so it sounds close but not identical. While the view is loaded, <code>traktor</code>, <code>traktor --undo</code>, <code>hype --traktor</code>, <code>colors apply</code> and <code>colors review --apply</code> refuse to run, and so do <code>colors train</code> and <code>colors explain</code>, which would otherwise learn from the view's colours instead of yours. Tested 2026-10-22: a full-collection <code>tempo scan</code> (471 tracks), and loading a view into real Traktor and switching back. Not yet confirmed in real Traktor: that tracks stay in their @145 Smartlists after loading them into a deck.</p></div>
 
 <h3 id="one-track">Looking at one track</h3>
 <div class="cmd"><pre>uv run dj-track-analyzer analyze "/path/to/track.mp3"</pre></div>
@@ -415,9 +416,11 @@ td code { white-space: nowrap; }
 
 <h3><code>colors train</code></h3>
 <ul>
-  <li><b><code>baseline_always_guess_middle</code>:</b> how good guessing your middle colour for every track would be (1.63 colours off). The model should beat it clearly.</li>
+  <li><b><code>baseline_always_guess_middle</code>:</b> how good guessing your middle colour for every track would be (1.63 colours off on the test collection), with the same four numbers as the model. The model should beat it clearly.</li>
   <li><b><code>average_error_in_colours</code>:</b> how many colour steps off it is on average, tested on tracks it didn't learn from. On the test collection: 1.17, against 1.63 for the baseline.</li>
+  <li><b><code>exact</code>:</b> how often it guesses exactly your colour.</li>
   <li><b><code>within_one_colour</code>:</b> how often it's right or one step off (67% on the test collection).</li>
+  <li><b><code>average_error_per_colour</code>:</b> the same error, but worked out for each colour separately and then averaged, so a small colour like Violet counts as much as a big one like Red. Training keeps the model with the lowest value here: the plain average would favour a model that plays safe in the middle and never gets the end colours right. 0 would be perfect; your own colouring isn't perfectly consistent either, so don't expect it near 0.</li>
   <li><b><code>accuracy_per_colour</code>:</b> The two ends are hardest to get exactly (around 10–13% on the test collection), because the model plays it safe toward the middle. Neighbouring colours are close to a coin flip from the sound alone.</li>
   <li><b><code>biggest_disagreements</code>:</b> tracks worth a second listen (also in <code>colors review</code>).</li>
 </ul>
@@ -452,6 +455,35 @@ td code { white-space: nowrap; }
   <li><code>examples</code>: the first changes, e.g. <code>Track.mp3: no colour → Orange</code>.</li>
   <li><code>changed: false</code> means nothing needed doing. <code>backup</code> is where the copy of the old collection went.</li>
 </ul>
+
+<!-- ───────────────────────────── -->
+<h2 id="how">How it works</h2>
+<p>Everything runs on your Mac; no audio leaves it. The technical details are in <a href="https://github.com/puppi3-music/dj-tools/blob/main/track-analyzer/README.md#7-how-the-analysis-works">README.md</a>.</p>
+
+<h3 id="how-listen">1. Listening to each track</h3>
+<p><code>scan</code> decodes every file once and measures it with <a href="https://essentia.upf.edu/">Essentia</a>, an open-source audio library:</p>
+<ul>
+  <li><b>BPM and key</b>, rounded to whole BPM and shown as Camelot. Where Traktor has its own BPM and key, those are used for searching and mixing; ours fill the gaps. Traktor's BPM and beatgrid are never changed.</li>
+  <li><b>Loudness</b> and how the energy rises and falls through the track.</li>
+  <li><b>Style</b>: two AI models trained on Discogs (one hears 400 styles, the other 519) listen to the main, loudest part of the track and their opinions are blended.</li>
+  <li><b>Mood, instruments and vocals</b>: smaller models on top say how aggressive, happy, party, relaxed or sad it sounds, which instruments they hear and whether there are vocals.</li>
+</ul>
+<p>The results are saved in <code>cache.db</code>, so each track is only analysed once (until its audio changes or it moves). Files over 12 minutes are treated as DJ mixes and get a timeline instead.</p>
+
+<h3 id="how-genre">2. From styles to DJ genres</h3>
+<p>Discogs styles are too fine-grained and named for record shops, so a rule list (<code>dj_genres.json</code>) turns them into DJ genre names. Each rule says which styles count and what BPM range fits; a track slightly outside the range loses points gradually instead of being ruled out. The top three become the track's genres. Edit the rules and <code>regenre</code> redoes the genres in seconds from the saved analysis.</p>
+
+<h3 id="how-colour">3. Learning your colours</h3>
+<p><code>colors train</code> looks at the tracks you've already coloured in Traktor and learns which sounds go with which colour, treating Red to Magenta as a scale. Several combinations of measurements are tried and the one that guesses best on tracks it hasn't seen is kept. On a test collection of about 470 tracks it was off by about one colour on average (versus 1.6 for always guessing the middle colour): it reliably tells Red from Magenta, but neighbouring colours are close to a coin flip. That's why it only fills in missing colours and never overwrites yours unless you ask.</p>
+
+<h3 id="how-hype">4. Hype</h3>
+<p>Half "rave sound" (how much the style model hears Trance, Hard Trance, Hands Up, Hardstyle or Tech Trance rather than deep styles) and half energy (loudness, party and aggressive moods, minus relaxed). Each part is ranked within your own collection, so Hype 8 means "more hype than about 70–80% of my tracks", not an absolute value.</p>
+
+<h3 id="how-tempo">5. The tempo view</h3>
+<p>Played at 145 BPM with key lock, a 124 BPM house track sounds different. <code>tempo scan</code> stretches each track to the target tempo with Rubber Band (pitch kept, like Traktor's key lock) and runs the same analysis again, stored separately in <code>data/at-145/</code>. Your colour is shifted by how much the colour model thinks the track changes, not replaced.</p>
+
+<h3 id="how-write">6. Writing to Traktor</h3>
+<p>Traktor keeps its own copy of track info in <code>collection.nml</code>. The app makes small text edits there (genre, colour, Comment 2 and a Smartlist folder) rather than rewriting the file, so everything else stays byte-for-byte the same. A backup is taken first, and <code>--undo</code> refuses if Traktor changed the file since, so it can't throw away your newer work.</p>
 
 <!-- ───────────────────────────── -->
 <h2 id="undo">Undo and safety</h2>

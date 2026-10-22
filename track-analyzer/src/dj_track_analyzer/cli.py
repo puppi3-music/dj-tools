@@ -11,6 +11,43 @@ from .analysis import (analyze_file, check_rules, download_models, log, split_st
 from .mcp_server import protect_stdout, build_mcp
 
 
+# Commands that follow the tempo view loaded in Traktor (if any); --native forces the normal library.
+VIEW_CMDS = {"hype", "stats", "export"}
+# Commands that always use the normal analysis (each track at its own tempo).
+NATIVE_CMDS = {"analyze", "scan", "tag", "untag", "traktor", "colors", "regenre"}
+
+
+def pick_library(args) -> None:
+    """Point this command at the loaded tempo view where it makes sense, and say which library it uses."""
+    from .analysis import HOME
+    from .collection import DB
+    from .traktor import TEMPO_STATE
+
+    state = HOME / TEMPO_STATE
+    bpm = json.loads(state.read_text()).get("bpm") if state.exists() else None
+    if args.cmd in VIEW_CMDS and bpm and not args.native:
+        from . import tempo
+
+        tempo.view_db(bpm).close()  # switches collection.DB / the cache to the view
+        log(f"Library: {bpm:g} BPM tempo view, loaded in Traktor ({tempo.view_home(bpm)}). "
+            "Add --native for each track at its own tempo")
+        return
+    note = f"Library: normal, each track at its own tempo ({DB})"
+    if bpm:
+        note += (f"\n  Note: Traktor has the {bpm:g} BPM view loaded, so its Genre/Colour/Comment 2 show "
+                 f"{bpm:g} BPM values, not these")
+    log(note)
+
+
+def say_if_nothing(out: dict, dry_run: bool = False) -> None:
+    """After a command that writes, say plainly when there was nothing to change."""
+    parts = [v for v in out.values() if isinstance(v, dict)] if "changed" not in out else [out]
+    flags = [d["changed"] for d in parts if "changed" in d]
+    counts = [out[k] for k in ("written", "would_write", "restored", "would_restore", "top_genre_changed") if k in out]
+    if (flags and not any(flags)) or (not flags and counts and not any(counts)):
+        log("Nothing would change." if dry_run else "Nothing to change: everything is already up to date.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Local track analyzer + MCP server")
     sub = ap.add_subparsers(dest="cmd")
@@ -86,6 +123,7 @@ def main() -> None:
     hy.add_argument("--remove", action="store_true", help="with --traktor: take the Hype part out of Comment 2 again")
     hy.add_argument("--dry-run", action="store_true", help="with --traktor: show what would change")
     hy.add_argument("--nml", default=None, help="path to collection.nml")
+    hy.add_argument("--native", action="store_true", help="use the normal library even while a tempo view is loaded")
     hy.add_argument("--json", action="store_true", help="print JSON instead of a table")
     te = sub.add_parser("tempo", help="your catalogue as heard at one tempo with key lock (default 145 BPM)")
     te.add_argument("action", choices=["scan", "report", "export", "nml", "load", "native", "refresh", "status"],
@@ -108,7 +146,9 @@ def main() -> None:
     sub.add_parser("regenre", help="recompute the genres of scanned tracks from the cache (after editing dj_genres.json)")
     ex = sub.add_parser("export", help="write the scanned collection to a CSV spreadsheet")
     ex.add_argument("out", nargs="?", default=None)
-    sub.add_parser("stats", help="summary of the scanned collection")
+    ex.add_argument("--native", action="store_true", help="use the normal library even while a tempo view is loaded")
+    st = sub.add_parser("stats", help="summary of the scanned collection")
+    st.add_argument("--native", action="store_true", help="use the normal library even while a tempo view is loaded")
     t = sub.add_parser("train", help="train your own genres from a folder")
     t.add_argument("folder")
     s = sub.add_parser("serve", help="run the MCP server")
@@ -116,6 +156,8 @@ def main() -> None:
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=8765)
     args = ap.parse_args()
+    if args.cmd in VIEW_CMDS | NATIVE_CMDS:
+        pick_library(args)
 
     if args.cmd == "setup":
         download_models(maest=not args.no_maest)
@@ -142,10 +184,13 @@ def main() -> None:
         out = collection.tag_from_db(args.folders or None, fields, args.min_score, args.use_my_genre, args.dry_run,
                                      args.multi, args.multi_ratio, args.max_genres)
         print(json.dumps(out, indent=2, ensure_ascii=False))
+        say_if_nothing(out, args.dry_run)
     elif args.cmd == "untag":
         from . import collection
 
-        print(json.dumps(collection.untag(args.folders or None, args.dry_run), indent=2, ensure_ascii=False))
+        out = collection.untag(args.folders or None, args.dry_run)
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+        say_if_nothing(out, args.dry_run)
     elif args.cmd == "traktor":
         from . import traktor
 
@@ -157,6 +202,8 @@ def main() -> None:
                                overwrite_colors=args.overwrite_colors,
                                color_min_confidence=args.color_min_confidence)
         print(json.dumps(out, indent=2, ensure_ascii=False))
+        if not args.undo:
+            say_if_nothing(out, args.dry_run)
     elif args.cmd == "colors":
         from . import colors
 
@@ -174,12 +221,15 @@ def main() -> None:
                                 min_confidence=0.75 if args.min_confidence is None else args.min_confidence,
                                 nml=args.nml)
         print(json.dumps(out, indent=2, ensure_ascii=False))
+        if args.action == "apply" or args.apply:
+            say_if_nothing(out, args.dry_run)
     elif args.cmd == "hype":
         from . import hype
 
         if args.traktor:
             out = hype.to_traktor(args.nml, dry_run=args.dry_run, remove=args.remove)
             print(json.dumps(out, indent=2, ensure_ascii=False))
+            say_if_nothing(out, args.dry_run)
             return
         out = hype.find(args.nml, least=args.least, colour=args.colour, bpm=args.bpm,
                         bpm_tolerance_pct=args.bpm_tolerance, key=args.key, gems=args.gems, limit=args.limit)
@@ -191,7 +241,9 @@ def main() -> None:
     elif args.cmd == "regenre":
         from . import collection
 
-        print(json.dumps(collection.regenre(), indent=2, ensure_ascii=False))
+        out = collection.regenre()
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+        say_if_nothing(out)
     elif args.cmd == "export":
         from . import collection
 

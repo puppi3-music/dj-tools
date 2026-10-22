@@ -735,6 +735,7 @@ def status() -> dict:
 
 def main(args) -> None:
     bpm = args.bpm
+    log(f"Library: tempo view, every track stretched to {bpm:g} BPM ({view_home(bpm)})")
     if args.action == "refresh":
         refresh(bpm)
         out = {"bpm": bpm, "refreshed": str(view_home(bpm))}
@@ -759,3 +760,6 @@ def main(args) -> None:
     else:
         out = status()
     print(json.dumps(out, indent=2, ensure_ascii=False))
+    if args.action in ("load", "native"):
+        from .cli import say_if_nothing
+        say_if_nothing(out, args.dry_run)

@@ -35,6 +35,7 @@ from .analysis import COLOR_NAMES, COLOR_MODEL, log
 def read_traktor_colors(nml: str | None = None) -> tuple[Path, dict[str, int], int]:
     """{file path: COLOR value 1-7} for every coloured track in Traktor's collection."""
     path = traktor.find_collection(nml)
+    traktor.refuse_if_tempo_view(path)  # a loaded view's colours aren't yours: they'd skew training and explain
     text = path.read_text(encoding="utf-8")
     c0, c1 = text.find("<COLLECTION"), text.find("</COLLECTION>")
     out: dict[str, int] = {}
@@ -448,7 +449,7 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
         chosen = scale and d["gap"] >= min_gap and conf >= min_confidence
         if chosen:
             changes[d["path"]] = (COLOR_NAMES.index(d["your_colour"]) + 1, COLOR_NAMES.index(d["sounds_like"]) + 1)
-        if i < limit or (apply and chosen):
+        if (chosen if apply else i < limit):  # --apply lists only the tracks it would recolour
             t = {k: d[k] for k in ("file", "your_colour", "sounds_like", "position")}
             t["gap"] = d["gap"]
             if scale:
