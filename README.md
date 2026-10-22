@@ -1,0 +1,9 @@
+# DJ tools
+
+Small, self-contained tools for DJs. Each tool lives in its own folder with its own README, dependencies and lockfile, so you can use one without installing the others.
+
+| Tool | What it does |
+|---|---|
+| [track-analyzer](track-analyzer/) | Local music analysis for a DJ's Mac: BPM, key, subgenre, mood, a learned Traktor colour scale and a hype score, synced into Traktor Pro 4 (optionally Lexicon), plus an MCP server for local LLMs. |
+
+Each tool is run from its own folder, e.g. `cd track-analyzer && uv sync`.

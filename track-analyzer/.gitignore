@@ -1,0 +1,20 @@
+# Python environment (recreated with `uv sync`)
+.venv/
+__pycache__/
+*.pyc
+
+# Output you saved from runs (keep it in logs/)
+logs/*
+!logs/.gitkeep
+*.txt
+*.csv
+*.log
+
+# macOS
+.DS_Store
+
+# Personal Claude context (see CLAUDE.md)
+CLAUDE.local.md
+
+# Databases, models, caches and backups (TRACK_ANALYZER_HOME default)
+data/
