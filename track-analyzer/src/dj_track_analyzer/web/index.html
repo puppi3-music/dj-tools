@@ -642,7 +642,7 @@ function renderCues(c) {
       <span class="small muted" style="margin-left:8px">Suggested:</span>${c.cues.filter(q => !sugHidden(c, q)).map(q => `<button class="sug" data-t="${q.ms / 1000}">${esc(q.name)} · ${barLabel(c, q.bar).n}</button>`).join("")}
       </div>${(c.loop_ideas || []).length ? `<div class="pads"><span class="small muted">Loop ideas:</span>${c.loop_ideas.map((l, k) =>
         `<button class="lp" data-t="${l.ms / 1000}" data-loop="${l.len_ms / 1000}" data-tip="L${k + 1}: ${esc(l.kind)} · ${l.bars} bars from bar ${barLabel(c, l.bar).n} · ${esc(l.why)}. Plays looped, gapless.">L${k + 1} · ${esc(l.kind.split(" · ")[0])} · ${barLabel(c, l.bar).n}</button>`).join("")}</div>` : ""}`;
-  return `${deck}<div class="filters" style="margin:0 0 6px"><button data-zoom="in" data-tip="Zoom in (or pinch / ctrl+scroll on the waveform, double-click)">+</button><button data-zoom="out" data-tip="Zoom out (shift+double-click)">−</button><button data-zoom="fit">Fit</button>
+  return `${deck}<div class="filters" style="margin:0 0 6px"><button data-zoom="in" data-tip="Zoom in, down to a single beat (or pinch / ctrl+scroll on the waveform, double-click)">+</button><button data-zoom="out" data-tip="Zoom out (shift+double-click)">−</button><button data-zoom="fit">Fit</button>
     <span class="small muted" id="wavezoom"></span><span class="small dim">drag or scroll sideways to move</span></div>
     <div class="wavewrap"><div class="wavehl" id="wavehl"></div><div class="playhead" id="ph"></div><div class="playhead ov" id="phov"></div><canvas id="wave" aria-label="Waveform with your cues (white, top) and suggested cues (blue, bottom)"></canvas></div>
     <div class="legend"><span><i style="background:#fff"></i>your cues (numbered, top)</span><span><i style="background:#6fb4ff"></i>suggested (named, bottom)</span>
@@ -992,15 +992,15 @@ const WAVE_DETAIL = new Map();  // path -> detailed waveform, fetched on the fir
 function decodeWave(w) {
   const raw = atob(w.data), a = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i);
-  return { n: w.slices, sec: w.seconds, a };
+  return { n: w.slices, t0: w.t0 || 0, sec: w.seconds, a };
 }
 function drawWave(c, box) {
   const cv = box.querySelector("#wave");
   if (!cv || !c.wave) return;
   const over = decodeWave(c.wave), dur = over.sec, beat = c.bar_seconds / 4;
   const kept = box._view && box._view.path === c.path ? box._view : null;  // keep the zoom across re-renders
-  const st = box._view = { path: c.path, v0: kept ? kept.v0 : 0, v1: kept ? kept.v1 : dur, detail: WAVE_DETAIL.get(c.path) || null, loading: false };
-  const minSpan = Math.max(2 * c.bar_seconds, 3), hl = box.querySelector("#wavehl"), zl = box.querySelector("#wavezoom");
+  const st = box._view = { path: c.path, v0: kept ? kept.v0 : 0, v1: kept ? kept.v1 : dur, detail: WAVE_DETAIL.get(c.path) || null, fine: null, loading: false };
+  const minSpan = beat, hl = box.querySelector("#wavehl"), zl = box.querySelector("#wavezoom");
   const barT = b => c.first_bar_s + b * c.bar_seconds, barAt = t => Math.round((t - c.first_bar_s) / c.bar_seconds);
   const TOP = 22, BOT = 132, MID = (TOP + BOT) / 2, HALF = (BOT - TOP) / 2, OV0 = 170, OV1 = 202;
   let W = 0, X = t => t;
@@ -1016,12 +1016,28 @@ function drawWave(c, box) {
         .catch(() => {}).finally(() => { st.loading = false; render(); });
     }
     render();
+    refine();  // after render: it measures the canvas
   }
-  function columns(g, data, v0, v1, y0, y1, w, alpha) {
-    const mid = (y0 + y1) / 2, half = (y1 - y0) / 2, span = v1 - v0;
-    for (let px = 0; px < w; px++) {
-      const ta = v0 + px * span / w, tb = ta + span / w;
-      const a = Math.max(0, Math.floor(ta / data.sec * data.n)), z = Math.min(data.n, Math.max(a + 1, Math.floor(tb / data.sec * data.n)));
+  // closer in than the 100-a-second detail can show: once the view settles, fetch just this stretch (and half a
+  // screen either side for panning) at the screen's own resolution; until it comes, the coarser level is stretched
+  const rate = () => W * (window.devicePixelRatio || 1) / (st.v1 - st.v0);  // slices a second the screen can show
+  const covers = (d, v0, v1) => d && d.t0 <= v0 + 1e-6 && d.t0 + d.sec >= v1 - 1e-6;
+  const fineOk = () => covers(st.fine, st.v0, st.v1) && st.fine.n / st.fine.sec >= rate() * 0.7;
+  let fineTimer = 0, fineSeq = 0;
+  function refine() {
+    clearTimeout(fineTimer);
+    if (SNAP || !W || rate() <= 100 || fineOk()) return;
+    fineTimer = setTimeout(() => {
+      const span = st.v1 - st.v0, t0 = Math.max(0, st.v0 - span / 2), t1 = Math.min(dur, st.v1 + span / 2), seq = ++fineSeq;
+      api("wave", { path: c.path, t0: t0.toFixed(4), t1: t1.toFixed(4), n: Math.ceil((t1 - t0) * rate()) })
+        .then(w => { if (seq === fineSeq) { st.fine = decodeWave(w); render(); } }).catch(() => {});
+    }, 120);
+  }
+  function columns(g, data, v0, v1, y0, y1, w, alpha) {  // one column per device pixel
+    const mid = (y0 + y1) / 2, half = (y1 - y0) / 2, span = v1 - v0, dpr = window.devicePixelRatio || 1, cols = Math.round(w * dpr), k = data.n / data.sec;
+    for (let px = 0; px < cols; px++) {
+      const ta = v0 + px * span / cols - data.t0, tb = ta + span / cols;
+      const a = Math.max(0, Math.floor(ta * k)), z = Math.min(data.n, Math.max(a + 1, Math.floor(tb * k)));
       if (a >= data.n) break;
       let pk = 0, rm = 0, lo = 0, md = 0, hi = 0;
       for (let i = a; i < z; i++) { const o = i * 5, d = data.a; pk = Math.max(pk, d[o]); rm = Math.max(rm, d[o + 1]); lo += d[o + 2]; md += d[o + 3]; hi += d[o + 4]; }
@@ -1029,8 +1045,8 @@ function drawWave(c, box) {
       // lows red, mids green, highs blue; the strongest band sets the colour
       const r = Math.round((255 * wl + 40 * wm + 60 * wh) / sum), gg = Math.round((50 * wl + 225 * wm + 140 * wh) / sum), bb = Math.round((40 * wl + 70 * wm + 255 * wh) / sum);
       const ph = pk / 255 * half, rh = Math.min(ph, rm / 255 * half * 1.6);
-      g.fillStyle = `rgba(${r},${gg},${bb},${0.45 * alpha})`; g.fillRect(px, mid - ph, 1, ph * 2);
-      g.fillStyle = `rgba(${r},${gg},${bb},${alpha})`; g.fillRect(px, mid - rh, 1, rh * 2);
+      g.fillStyle = `rgba(${r},${gg},${bb},${0.45 * alpha})`; g.fillRect(px / dpr, mid - ph, 1 / dpr, ph * 2);
+      g.fillStyle = `rgba(${r},${gg},${bb},${alpha})`; g.fillRect(px / dpr, mid - rh, 1 / dpr, rh * 2);
     }
   }
   let render = function () {
@@ -1046,6 +1062,7 @@ function drawWave(c, box) {
     const b0 = Math.max(0, Math.floor((st.v0 - c.first_bar_s) / c.bar_seconds) - 1), b1 = Math.min(c.bars, Math.ceil((st.v1 - c.first_bar_s) / c.bar_seconds) + 1);
     for (let b = b0; b <= b1; b++) {
       const x = Math.round(X(barT(b))), n = b - c.grid_bar + 1, in4 = (n - 1) % 4 === 0, in8 = (n - 1) % 8 === 0, in32 = (n - 1) % 32 === 0;
+      if (pxBeat > 80) for (let k = 1; k < 16; k++) if (k % 4) { g.fillStyle = "rgba(255,255,255,.04)"; g.fillRect(Math.round(X(barT(b) + k * beat / 4)), TOP, 1, BOT - TOP); }  // 16ths, very close in
       if (pxBeat > 8) for (let k = 1; k < 4; k++) { g.fillStyle = "rgba(255,255,255,.07)"; g.fillRect(Math.round(X(barT(b) + k * beat)), TOP, 1, BOT - TOP); }
       // beat < bar < every 4 bars (as in Traktor) < 8-bar phrase < 32 bars
       if (in32 || in8 || (in4 && pxBar * 4 >= 8) || pxBar > 4) {
@@ -1054,7 +1071,8 @@ function drawWave(c, box) {
       }
       if (n >= 1 && (n - 1) % step === 0) { g.fillStyle = in8 ? "rgba(255,255,255,.7)" : "rgba(255,255,255,.45)"; g.fillText(String(n), x + 2, BOT - 3); }
     }
-    const data = st.detail && span < dur * 0.6 ? st.detail : over;
+    const fine = covers(st.fine, st.v0, st.v1) && st.fine.n / st.fine.sec > 100 ? st.fine : null;
+    const data = fine || (st.detail && span < dur * 0.6 ? st.detail : over);
     columns(g, data, st.v0, st.v1, TOP, BOT, W, 1);
     const vis = x => x > -40 && x < W + 40;
     (c.loop_ideas || []).forEach((l, k) => {  // loop ideas on top of the waveform: L1 solid edges, the others lighter, numbered
@@ -1112,7 +1130,12 @@ function drawWave(c, box) {
       g.fillStyle = "rgba(12,12,14,.6)"; g.fillRect(0, OV0, a, OV1 - OV0); g.fillRect(z, OV0, W - z, OV1 - OV0);
       g.strokeStyle = "#fff"; g.strokeRect(a + 0.5, OV0 + 0.5, Math.max(2, z - a - 1), OV1 - OV0 - 1);
     }
-    if (zl) zl.textContent = zoomed() ? `${mmss(st.v0)}–${mmss(st.v1)} · ${Math.round(span / c.bar_seconds)} bars${st.loading ? " · loading detail…" : st.detail && span < dur * 0.6 ? " · detailed" : ""}` : "whole track";
+    if (zl) {  // close in: times to the hundredth, the length in beats, and how fine the waveform is
+      const tm = t => span < 10 ? `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, "0")}` : mmss(t);
+      const len = span < 2 * c.bar_seconds ? `${(span / beat).toFixed(1)} beats` : `${Math.round(span / c.bar_seconds)} bars`;
+      const res = data === over ? "" : ` · ${span * 1000 / W < 10 ? (span * 1000 / W).toFixed(2) + " ms" : (span / W).toFixed(2) + " s"} a pixel${rate() <= 100 || fineOk() ? "" : " · sharpening…"}`;
+      zl.textContent = zoomed() ? `${tm(st.v0)}–${tm(st.v1)} · ${len}${st.loading ? " · loading detail…" : res}` : "whole track";
+    }
   }
 
   const zoomAt = (t, f) => setView(t - (t - st.v0) * f, t + (st.v1 - t) * f);

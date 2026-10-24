@@ -186,7 +186,7 @@ uv run dj-track-analyzer hold --genre "Artist - Title"       # hold the genre of
 uv run dj-track-analyzer hold --colour "Title" --release     # take one off the colour hold list
 ```
 
-**Cue points and a mix loop, learned from yours.** The analyzer can learn where you put cues: it measures every bar on Traktor's own beat grid (loudness, bass, kick, brightness, timbre) and learns from the tracks you cued yourself which bars you cue and where you put your mix loop. Each track's panel in the web page then shows its waveform (coloured like DJ software: lows red, mids green, highs blue, ticks every 8 bars) with your cues on top and the suggestions below, named by what happens there (Intro, Drop, Breakdown, Kick in, Lift, Outro, Phrase), plus a suggested loop.
+**Cue points and a mix loop, learned from yours.** The analyzer can learn where you put cues: it measures every bar on Traktor's own beat grid (loudness, bass, kick, brightness, timbre) and learns from the tracks you cued yourself which bars you cue and where you put your mix loop. Each track's panel in the web page then shows its waveform (coloured like DJ software: lows red, mids green, highs blue, ticks every 8 bars) with your cues on top and the suggestions below, named by what happens there (Intro, Drop, Breakdown, Kick in, Lift, Outro, Phrase), plus a suggested loop. Zoom in (+, pinch or ctrl+scroll) down to a single beat: close in, the waveform is cut from the audio at the screen's own resolution, down to single samples.
 
 ```bash
 uv run dj-track-analyzer cues train            # learn from your cues (listens to the cued tracks first, ~13 min once)

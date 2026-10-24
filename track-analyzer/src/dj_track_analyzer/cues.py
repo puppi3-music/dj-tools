@@ -216,32 +216,69 @@ def bars_get(p: Path, bpm: float, grid_ms: float):
     return starts, np.frombuffer(row[2], dtype=np.float32).reshape(len(starts), -1)
 
 
-def wave_detail(p: Path, per_second: int = 100) -> tuple[np.ndarray, float]:
-    """A detailed waveform for zooming in (100 slices a second: single kicks show), made from the audio on
-    request and not cached on disk (about 180 KB per 6-minute track)."""
-    e = analysis.es()
-    try:
-        stereo, sr, nch, *_ = e.AudioLoader(filename=str(p))()
-    except RuntimeError as err:
-        if "more than 2 channels" not in str(err):
-            raise
-        stereo, sr, nch, *_ = analysis._load_downmixed(p)
-    mono = e.MonoMixer()(stereo, nch)
-    if sr != SR:
-        mono = e.Resample(inputSampleRate=sr, outputSampleRate=SR, quality=1)(mono)
-    x = _on_traktor_time(p, np.asarray(mono, dtype=np.float32), sr)
-    nfr = max(0, 1 + (len(x) - N) // HOP)
-    win = np.hanning(N).astype(np.float32)
-    f = np.fft.rfftfreq(N, 1 / SR)
-    bands = np.zeros((nfr, len(BANDS)), np.float32)
-    frames = np.lib.stride_tricks.sliding_window_view(x, N)
-    for s0 in range(0, nfr, 4096):
-        idx = np.arange(s0, min(nfr, s0 + 4096))
-        pw = np.abs(np.fft.rfft(frames[idx * HOP] * win, axis=1)) ** 2
-        for b, (lo, hi) in enumerate(BANDS):
-            bands[idx, b] = pw[:, (f >= lo) & (f < hi)].sum(1)
-    dur = len(x) / SR
-    return _wave(x, bands, max(10, int(dur * per_second))), dur
+class WaveSource:
+    """A track's decoded audio (on Traktor's timeline) and its 10 ms band powers, kept so any stretch of it can be cut
+    into a waveform as fine as the zoom needs, down to single samples. Peaks are scaled against the whole track's
+    loudest peak and band strengths against the whole track's loud level (as in _wave), so every zoom level matches."""
+
+    def __init__(self, p: Path):
+        e = analysis.es()
+        try:
+            stereo, sr, nch, *_ = e.AudioLoader(filename=str(p))()
+        except RuntimeError as err:
+            if "more than 2 channels" not in str(err):
+                raise
+            stereo, sr, nch, *_ = analysis._load_downmixed(p)
+        mono = e.MonoMixer()(stereo, nch)
+        if sr != SR:
+            mono = e.Resample(inputSampleRate=sr, outputSampleRate=SR, quality=1)(mono)
+        x = self.x = _on_traktor_time(p, np.asarray(mono, dtype=np.float32), sr)
+        nfr = max(0, 1 + (len(x) - N) // HOP)
+        win = np.hanning(N).astype(np.float32)
+        f = np.fft.rfftfreq(N, 1 / SR)
+        bands = np.zeros((nfr, len(BANDS)), np.float32)
+        frames = np.lib.stride_tricks.sliding_window_view(x, N)
+        for s0 in range(0, nfr, 4096):
+            idx = np.arange(s0, min(nfr, s0 + 4096))
+            pw = np.abs(np.fft.rfft(frames[idx * HOP] * win, axis=1)) ** 2
+            for b, (lo, hi) in enumerate(BANDS):
+                bands[idx, b] = pw[:, (f >= lo) & (f < hi)].sum(1)
+        g = np.stack([bands[:, c].sum(1) for c in ([0, 1], [2, 3], [4, 5])], 1)  # lows, mids, highs
+        self.cum = np.vstack([np.zeros((1, 3)), np.cumsum(g, 0, dtype=np.float64)])
+        self.dur = len(x) / SR
+        self.top = max(float(np.abs(x).max()), 1e-9)
+        self.ref = None
+        self.ref = self._levels(self._edges(0, self.dur, max(10, int(self.dur * 100)))[0])[1]  # loud level at 100 slices/s
+
+    def _edges(self, t0: float, t1: float, n: int) -> tuple[np.ndarray, np.ndarray]:
+        s0, s1 = max(0, int(t0 * SR)), min(len(self.x), max(int(t0 * SR) + 1, int(np.ceil(t1 * SR))))
+        n = max(1, min(n, s1 - s0))  # never finer than one sample a slice
+        return np.linspace(s0, s1, n + 1).astype(int), self.x[s0:s1]
+
+    def _levels(self, edges: np.ndarray):
+        """Band strengths per slice (the frames centred in it, or the nearest one when slices are finer than the
+        10 ms hop) and, unless already known, the loud level (95th percentile) they're scaled against."""
+        nfr = len(self.cum) - 1
+        a = np.clip(np.ceil((edges[:-1] - N / 2) / HOP), 0, nfr).astype(int)
+        z = np.clip(np.ceil((edges[1:] - N / 2) / HOP), 0, nfr).astype(int)
+        near = np.clip(np.round(((edges[:-1] + edges[1:]) / 2 - N / 2) / HOP), 0, max(0, nfr - 1)).astype(int)
+        empty = z <= a
+        a, z = np.where(empty, near, a), np.where(empty, np.minimum(near + 1, nfr), z)
+        e = np.sqrt((self.cum[z] - self.cum[a]) / np.maximum(1, z - a)[:, None])  # amplitude, not power
+        return e, self.ref if self.ref is not None else np.maximum(np.percentile(e, 95, axis=0), 1e-12)
+
+    def cut(self, t0: float, t1: float, n: int) -> np.ndarray:
+        """Slices x [peak, rms, low, mid, high] (uint8) for [t0, t1), n slices (fewer if that's finer than a sample)."""
+        edges, seg = self._edges(t0, t1, n)
+        rel = edges[:-1] - edges[0]
+        peak = np.maximum.reduceat(np.abs(seg), rel)
+        rms = np.sqrt(np.add.reduceat(seg.astype(np.float64) ** 2, rel) / np.diff(edges))
+        e, ref = self._levels(edges)
+        out = np.zeros((len(rel), 5), np.uint8)
+        out[:, 0] = np.clip(peak / self.top * 255, 0, 255)
+        out[:, 1] = np.clip(rms / self.top * 255, 0, 255)
+        out[:, 2:] = np.clip(e / ref * 255, 0, 255)
+        return out
 
 
 def wave_get(p: Path) -> tuple[np.ndarray, float] | None:

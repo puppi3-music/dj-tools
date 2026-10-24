@@ -258,7 +258,7 @@ def rescan_track(path: str) -> dict:
     with library("native"):
         cues.forget_track(path)
         cues.bars(Path(path), d["bpm"], d["grid_ms"])
-    _detail.pop(path, None)
+    _wave_src.pop(path, None)
     return {"rescanned": True, "corrections": recount(path)}
 
 
@@ -282,7 +282,7 @@ def write_cues(dry_run: bool) -> dict:
     if not dry_run and out.get("changed"):
         WRITTEN_PLANS.write_text(json.dumps({"backup": out["backup"], "plans": before}))
         _grids["mtime"] = None
-        _detail.clear()
+        _wave_src.clear()
     return out
 
 
@@ -305,7 +305,7 @@ def undo_write() -> dict:
         WRITTEN_PLANS.unlink()
         out["approvals_restored"] = len(saved["plans"])
     _grids["mtime"] = None
-    _detail.clear()
+    _wave_src.clear()
     return out
 
 
@@ -336,7 +336,9 @@ def track_cues(path: str) -> dict:
     return out
 
 
-_detail: dict = {}  # path -> detailed waveform, the last few tracks zoomed into
+_wave_src: dict = {}  # path -> cues.WaveSource, the decoded audio of the last WAVE_KEEP tracks zoomed into
+WAVE_KEEP = 2  # ≈65 MB each for a 6-minute track
+_wave_lock = threading.Lock()
 
 
 def playable(path: str) -> Path:
@@ -384,20 +386,31 @@ def deck_audio(path: str) -> Path:
     return out
 
 
-def wave_detail(path: str) -> dict:
-    """Detailed waveform for zooming (100 slices a second), made from the audio once per server run."""
+def wave_detail(path: str, t0: float | None = None, t1: float | None = None, n: int | None = None) -> dict:
+    """Detailed waveform for zooming: the whole track at 100 slices a second, or with t0/t1 just that stretch in n
+    slices (as fine as the screen needs, down to single samples). Cut from audio decoded once per server run."""
     import base64
 
     from . import cues
 
     if path not in cue_grids():
         raise ValueError("not a track in Traktor's collection")
-    if path not in _detail:
-        w, dur = cues.wave_detail(Path(path))
-        while len(_detail) >= 8:
-            _detail.pop(next(iter(_detail)))
-        _detail[path] = {"slices": len(w), "seconds": round(dur, 3), "data": base64.b64encode(w.tobytes()).decode()}
-    return _detail[path]
+    with _wave_lock:  # one decode per track, even when the page asks for several windows at once
+        if path not in _wave_src:
+            while len(_wave_src) >= WAVE_KEEP:
+                _wave_src.pop(next(iter(_wave_src)))
+            _wave_src[path] = cues.WaveSource(Path(path))
+        src = _wave_src.pop(path)
+        _wave_src[path] = src  # most recently used last
+    if t0 is None or t1 is None:
+        t0, t1, n = 0.0, src.dur, max(10, int(src.dur * 100))
+    else:
+        n = min(int(n or 1000), 20000)  # a window: a few screens' worth of pixels at most
+    t0, t1 = max(0.0, t0), min(src.dur, t1)
+    if t1 <= t0:
+        raise ValueError("empty stretch")
+    w = src.cut(t0, t1, n)
+    return {"slices": len(w), "t0": round(t0, 6), "seconds": round(t1 - t0, 6), "data": base64.b64encode(w.tobytes()).decode()}
 
 
 PRE_ROLL = 0.5  # seconds decoded before a loop and thrown away
@@ -845,7 +858,7 @@ def build_app(log_dirs: list[Path]):
         Route("/api/saved", respond(lambda q: {"files": saved_files(log_dirs), "folders": [str(d) for d in log_dirs]})),
         Route("/api/saved-file", respond(lambda q: saved_file(log_dirs, q["id"]))),
         Route("/api/cues", respond(lambda q: track_cues(q["path"]))),
-        Route("/api/wave", respond(lambda q: wave_detail(q["path"]))),
+        Route("/api/wave", respond(lambda q: wave_detail(q["path"], num(q, "t0"), num(q, "t1"), int(num(q, "n", 1000))))),
         Route("/api/audio", audio),
         Route("/api/loop", loop_endpoint),
         Route("/api/hold", hold_endpoint, methods=["POST"]),
