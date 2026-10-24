@@ -552,7 +552,7 @@ td code { white-space: nowrap; }
 <tr><td>"No 145 BPM analysis yet" (or another tempo)</td><td>Run <code>tempo scan</code> first, with the same <code>--bpm</code></td></tr>
 <tr><td>"Style models missing"</td><td>Run <code>setup</code>. No command downloads models by itself, so <code>setup</code> has to come first</td></tr>
 <tr><td>"MAEST isn't downloaded" at the start of a scan, or <code>genre_basis</code> says "EffNet" without MAEST</td><td>Genres are using the EffNet model only. Run <code>setup</code> (without <code>--no-maest</code>) and scan again with <code>--rescan</code>. If it still says this after <code>setup</code>, the reason is in <code>genre_basis.maest</code>: paste the output to Claude</td></tr>
-<tr><td>An error about more than 2 channels</td><td>It's a surround (5.1) file. Make a stereo copy: <code>ffmpeg -i in.flac -ac 2 out.flac</code></td></tr>
+<tr><td>An error about more than 2 channels</td><td>It's a surround (5.1) file. With ffmpeg installed (<code>brew install ffmpeg</code>) it's mixed down to stereo automatically; scan again</td></tr>
 <tr><td>"listed but missing" during a scan</td><td>Traktor knows tracks whose files moved or are on a disconnected drive. Reconnect the drive, or relocate them in Traktor</td></tr>
 <tr><td>A run seems slow</td><td>The first run after <code>setup</code> or an update analyses every track once (10–15 min, a <code>--rescan</code> about 30). Ctrl-C is safe; it resumes where it stopped</td></tr>
 <tr><td>Smartlists look wrong in Traktor</td><td>Quit Traktor, <code>traktor --undo</code>, then report what you saw</td></tr>

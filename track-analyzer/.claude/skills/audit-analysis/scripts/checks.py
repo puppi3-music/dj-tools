@@ -40,7 +40,7 @@ def rules() -> None:
                 where = ("EffNet " if s in el else "") + ("MAEST" if s in ml else "")
                 if s not in el or s not in ml:
                     print(f"  {g:24} {s:20} only in: {where or 'NEITHER (ignored!)'}")
-    print("  (styles in only one model are scored by that model alone, unblended; see calibration)")
+    print("  (a style only MAEST knows stands in for EffNet at the track's EffNet/MAEST ratio; see calibration)")
 
 
 def heads() -> None:
@@ -125,7 +125,8 @@ def cache() -> None:
 def timing() -> None:
     """Seconds per analysis stage on one ~5-7 min track (first MAEST run includes loading it)."""
     r = collection.db().execute("SELECT path FROM tracks WHERE type='track' AND error IS NULL "
-                                "AND duration_sec BETWEEN 300 AND 420 LIMIT 1").fetchone()
+                                "AND duration_sec BETWEEN 300 AND 420 AND filename NOT LIKE '%.sync-conflict-%' "
+                                "ORDER BY path LIMIT 1").fetchone()
     p = Path(r["path"])
     print(f"  {p.name}")
 
@@ -142,6 +143,9 @@ def timing() -> None:
     o = t("effnet", lambda: analysis.pooled_effnet(m16))
     t("heads", lambda: (analysis.run_moods(o[0], o[5]), analysis.run_instruments(o[0], o[5])))
     t("maest", lambda: analysis.run_maest(m16))
+    b = collection.mix_bpm(collection.db().execute("SELECT * FROM tracks WHERE path=?", (str(p),)).fetchone())
+    if b:
+        t("stretch", lambda: analysis.stretch(st, sr, b, 145.0))  # tempo view, Rubber Band R3
 
 
 CHECKS = {"rules": rules, "heads": heads, "calibration": calibration, "bpm": bpm, "cache": cache, "timing": timing}

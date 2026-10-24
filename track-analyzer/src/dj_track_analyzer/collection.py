@@ -387,6 +387,19 @@ def _drop_decomposed_duplicates(con: sqlite3.Connection) -> None:
         log(f"Removed {len(dupes)} duplicate entries (same file, accented name spelled differently)")
 
 
+def sync_conflict(path: str | Path) -> bool:
+    """Syncthing's '<name>.sync-conflict-<date>-<time>-<device>.mp3' copies: the same track twice."""
+    return ".sync-conflict-" in Path(path).name
+
+
+def _missing_for_good(path: str) -> bool:
+    """The file is gone, and not just on a drive that isn't plugged in right now."""
+    if os.path.exists(path):
+        return False
+    parts = Path(path).parts
+    return not (len(parts) > 2 and parts[1] == "Volumes") or os.path.isdir(os.path.join(*parts[:3]))
+
+
 def find_audio(roots: list[str]) -> list[Path]:
     files = []
     for r in roots:
@@ -472,7 +485,9 @@ def _worker_init():
     analysis.es()
 
 
-KEEP_ON_RESCAN = ("traktor_color", "traktor_bpm", "traktor_camelot")  # come from Traktor, not the analysis
+# Come from Traktor, not the analysis; hype is a rank within the collection, recomputed after a scan
+# (kept meanwhile so a stopped scan doesn't leave tracks without one).
+KEEP_ON_RESCAN = ("traktor_color", "traktor_bpm", "traktor_camelot", "hype")
 
 
 def save_row(con: sqlite3.Connection, row: dict) -> None:
@@ -525,6 +540,15 @@ def scan(roots: list[str], workers: int | None = None, rescan: bool = False,
         log(f"Traktor collection {nml_path}: {len(tk_files)} tracks found on disk"
             + (f", {tk_missing} listed but missing (moved or on a disconnected drive)" if tk_missing else ""))
         files = sorted(set(files) | set(tk_files))
+    conflicts = [f for f in files if sync_conflict(f)]
+    if conflicts:
+        files = [f for f in files if not sync_conflict(f)]
+        log(f"Skipping {len(conflicts)} Syncthing conflict copies (*.sync-conflict-*): the same tracks twice")
+    old = [p for p in known_all(con) if sync_conflict(p)]
+    if old:
+        con.executemany("DELETE FROM tracks WHERE path = ?", [(x,) for x in old])
+        con.commit()
+        log(f"Removed {len(old)} earlier results for Syncthing conflict copies")
     # Leave out Traktor's own mix recordings, and any folders the user excluded.
     skip_dirs = [str(Path(os.path.expanduser(d)).resolve()) for d in (exclude or [])]
     if not include_recordings:
@@ -559,9 +583,8 @@ def scan(roots: list[str], workers: int | None = None, rescan: bool = False,
     present = {str(f) for f in files}
     gone = [path for path in known_all(con) if any(path.startswith(r.rstrip("/") + "/") or path == r for r in roots_abs)
             and path not in present]
-    if use_traktor:  # tracks scanned before that no longer exist anywhere
-        gone += [path for path in known_all(con) if path not in present and path not in gone
-                 and not os.path.exists(path)]
+    # tracks scanned before that no longer exist anywhere (a drive that isn't plugged in doesn't count)
+    gone += [path for path in known_all(con) if path not in present and path not in gone and _missing_for_good(path)]
     if gone:
         con.executemany("DELETE FROM tracks WHERE path = ?", [(g,) for g in gone])
         con.commit()
@@ -624,6 +647,13 @@ def scan(roots: list[str], workers: int | None = None, rescan: bool = False,
             pool.close()
             pool.join()
 
+    if done and con.execute("SELECT 1 FROM tracks WHERE hype IS NOT NULL LIMIT 1").fetchone():
+        from . import hype
+
+        try:  # ranks within the collection: new and changed tracks move everyone's
+            hype.compute(con)
+        except SystemExit as err:
+            log(f"(hype not scored: {err})")
     if csv_out:
         export_csv(csv_out)
     out = summary(con)
@@ -698,7 +728,7 @@ def summary(con: sqlite3.Connection | None = None) -> dict:
     total = con.execute("SELECT COUNT(*) FROM tracks").fetchone()[0]
     errors = con.execute("SELECT COUNT(*) FROM tracks WHERE error IS NOT NULL AND error NOT LIKE 'tags:%'").fetchone()[0]
     genres = con.execute(
-        "SELECT genre, COUNT(*) n, CAST(ROUND(AVG(bpm)) AS INTEGER) avg_bpm FROM tracks WHERE genre IS NOT NULL "
+        f"SELECT genre, COUNT(*) n, CAST(ROUND(AVG({BPM_SQL})) AS INTEGER) avg_bpm FROM tracks WHERE genre IS NOT NULL "
         "GROUP BY genre ORDER BY n DESC").fetchall()
     keys = con.execute(
         f"SELECT {CAMELOT_SQL} camelot, COUNT(*) n FROM tracks WHERE {CAMELOT_SQL} IS NOT NULL "
@@ -742,9 +772,14 @@ COLOR_ORDER_SQL = ("COALESCE(CASE traktor_color " + " ".join(f"WHEN '{n}' THEN {
 def search(genre: str | None = None, bpm_min: float | None = None, bpm_max: float | None = None,
            camelot: str | None = None, harmonic: bool = False, text: str | None = None,
            track_type: str | None = "track", limit: int = 50, order: str = "bpm",
-           color: str | None = None) -> dict:
+           color: str | None = None, exact_genre: str | None = None) -> dict:
+    """genre: text anywhere in the genres, styles or genre tag ("trance" finds Hard Trance too).
+    exact_genre: one of the track's genres is exactly this (as the genre Smartlists match)."""
     con = db()
     where, args = ["error IS NULL OR error LIKE 'tags:%'"], []
+    if exact_genre:
+        where.append("LOWER(?) IN (LOWER(genre), LOWER(genre_2), LOWER(my_genre))")
+        args.append(exact_genre)
     if genre:
         where.append("(genre LIKE ? OR genre_2 LIKE ? OR my_genre LIKE ? OR styles LIKE ? OR tag_genre LIKE ?)")
         args += [f"%{genre}%"] * 5
@@ -792,7 +827,7 @@ def mix_suggestions(query: str, bpm_tolerance_pct: float = 4.0, same_genre: bool
         raise ValueError(f"{seed['filename']} has no BPM/key (maybe a mix or a failed analysis).")
     tol = seed_bpm * bpm_tolerance_pct / 100
     res = search(
-        genre=(seed["my_genre"] or seed["genre"]) if same_genre else None,
+        exact_genre=(seed["my_genre"] or seed["genre"]) if same_genre else None,
         bpm_min=seed_bpm - tol, bpm_max=seed_bpm + tol,
         camelot=seed_cam, harmonic=True, limit=limit + 1,
     )

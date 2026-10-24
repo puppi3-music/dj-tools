@@ -359,6 +359,9 @@ def train(nml: str | None = None, progress=log, deep: bool = True, workers: int 
     analysis._color_bundle.clear()
 
     updated = refresh_predictions(con, traktor_colors=colors, progress=progress)
+    from . import tempo
+
+    views = tempo.refresh_all_views(progress)  # their colours came from the previous model (train refuses while one is loaded)
     return {
         "trained_on": int(len(y)), "tracks_per_colour": counts,
         "colour_scale_check": sanity,
@@ -372,6 +375,7 @@ def train(nml: str | None = None, progress=log, deep: bool = True, workers: int 
         "biggest_disagreements": [{k: d[k] for k in ("file", "your_colour", "sounds_like", "position")}
                                   for d in disagreements[:10]],
         "predictions_updated": updated, "saved_to": str(COLOR_MODEL),
+        **({"tempo_views_refreshed": views} if views else {}),
     }
 
 
@@ -394,21 +398,25 @@ def _instrument_check(instr_rows: list[dict], y: np.ndarray, used: list[int], to
 
 
 def refresh_predictions(con, traktor_colors: dict[str, int] | None = None, progress=log,
-                        csv_out: Path | None = collection.DEFAULT_CSV, bpm_col: str = "bpm") -> int:
+                        csv_out: Path | None = collection.DEFAULT_CSV, own_bpm: dict[str, float] | None = None) -> int:
     """Recompute the predicted colour for every scanned track (uses cached fingerprints) and
-    record each track's current Traktor colour in the database. bpm_col: the column the colour
-    model reads as BPM (a tempo view passes source_bpm, the track's own tempo)."""
-    cols = [f"{bpm_col} AS bpm" if c == "bpm" else c for c in INFO_COLS]
+    record each track's current Traktor colour in the database. A track the model can't place now
+    (not in the cache, or missing a feature) loses its old prediction rather than keep a stale one.
+    own_bpm: {path: BPM} for the colour model instead of the bpm column (a tempo view passes the BPM
+    we measured at each track's own tempo, as in the normal analysis the model was trained on)."""
     rows = [dict(r) for r in con.execute(
-        f"SELECT path, {', '.join(cols)} FROM tracks WHERE (error IS NULL OR error LIKE 'tags:%') AND type='track'")]
+        f"SELECT path, {', '.join(INFO_COLS)} FROM tracks WHERE (error IS NULL OR error LIKE 'tags:%') AND type='track'")
+        ] if analysis.color_model() is not None else []  # no model: leave the predictions alone
     n = 0
     for r in rows:
         p = Path(r["path"])
-        if not p.exists():
+        if own_bpm is not None:
+            r["bpm"] = own_bpm.get(r["path"])
+        hit = analysis.cache_get(p) if p.exists() else None
+        if not hit:  # gone, or not analysed with the current models (the next scan fills it in)
+            con.execute("UPDATE tracks SET color=NULL, color_position=NULL, color_confidence=NULL WHERE path=?",
+                        (r["path"],))
             continue
-        hit = analysis.cache_get(p)
-        if not hit:
-            continue  # not analysed with the current models; the next scan fills it in
         maest = instruments = extra = None
         deep = analysis.deep_get(p)
         if deep:
@@ -423,11 +431,10 @@ def refresh_predictions(con, traktor_colors: dict[str, int] | None = None, progr
             if deep[3] and deep[3].get("approachability") is not None:
                 con.execute("UPDATE tracks SET approachability=? WHERE path=?",
                             (deep[3]["approachability"], r["path"]))
-        col = analysis.predict_color(hit[1], hit[2], r, maest, instruments, extra)
-        if col:
-            con.execute("UPDATE tracks SET color=?, color_position=?, color_confidence=? WHERE path=?",
-                        (col["color"], col["position"], col["confidence"], r["path"]))
-            n += 1
+        col = analysis.predict_color(hit[1], hit[2], r, maest, instruments, extra) or {}
+        con.execute("UPDATE tracks SET color=?, color_position=?, color_confidence=? WHERE path=?",
+                    (col.get("color"), col.get("position"), col.get("confidence"), r["path"]))
+        n += bool(col)
     if traktor_colors is not None:
         con.execute("UPDATE tracks SET traktor_color=NULL")
         con.executemany("UPDATE tracks SET traktor_color=? WHERE path=?",

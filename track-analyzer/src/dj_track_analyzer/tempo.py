@@ -149,12 +149,15 @@ def native_rows() -> dict[str, sqlite3.Row]:
 
 
 def _scan_one(job):
-    """Runs in a worker process. job: (path, track's BPM, BPM to play it at)."""
-    path, src, bpm = job
+    """Runs in a worker process. job: (path, track's BPM, BPM to play it at, our own-tempo BPM measurement).
+    The stretch goes from the track's BPM (Traktor's where it has one); the colour model gets our own
+    measurement, as in the normal analysis it was trained on (see refresh)."""
+    path, src, bpm, own = job
     use_view(bpm)
     p = Path(path)
     try:
-        row = collection.to_row(p, analysis.analyze_file(path, timeline=False, genre_bpm=bpm, tempo=(src, bpm)), None)
+        row = collection.to_row(p, analysis.analyze_file(path, timeline=False, genre_bpm=bpm, tempo=(src, bpm),
+                                                         own_bpm=own), None)
     except SystemExit as err:  # e.g. Rubber Band missing: the same for every track
         return {"path": path, "fatal": str(err)}
     except Exception as err:
@@ -231,7 +234,7 @@ def scan(bpm: float = DEFAULT_BPM, workers: int | None = None, rescan: bool = Fa
             workers = max(1, min(5, (os.cpu_count() or 4) // 2))
         workers = max(1, min(workers, len(todo)))
         log(f"Using {workers} worker{'s' if workers > 1 else ''}. Ctrl-C stops safely; run the same command to resume.\n")
-        jobs = [(p, src[p], bpm) for p in todo]
+        jobs = [(p, src[p], bpm, native[p]["bpm"]) for p in todo]
         pool = None
         try:
             if workers == 1:
@@ -308,15 +311,21 @@ def refresh(bpm: float, con: sqlite3.Connection | None = None) -> None:
     from . import hype
 
     con = con or view_db(bpm)
-    for (p,) in con.execute("SELECT path FROM tracks WHERE type='track' AND error IS NULL").fetchall():
+    gone = [p for (p,) in con.execute("SELECT path FROM tracks") if collection._missing_for_good(p)]
+    if gone:
+        con.executemany("DELETE FROM tracks WHERE path=?", [(p,) for p in gone])
+        log(f"Removed {len(gone)} tracks whose files no longer exist")
+    for (p,) in con.execute("SELECT path FROM tracks WHERE type='track' "
+                            "AND (error IS NULL OR error LIKE 'tags:%')").fetchall():
         g = view_genres(p, bpm)  # cheap (cached scores); picks up changes to the rules
         if g is not None:
             cols = _genre_cols(g)
             con.execute(f"UPDATE tracks SET {', '.join(f'{c}=?' for c in cols)} WHERE path=?", [*cols.values(), p])
     con.commit()
     if analysis.color_model() is not None:
-        colors.refresh_predictions(con, csv_out=None, bpm_col="source_bpm")
         native = native_rows()
+        # the BPM we measured at each track's own tempo, as _native_position uses: the colour shift is the tempo's alone
+        colors.refresh_predictions(con, csv_out=None, own_bpm={p: r["bpm"] for p, r in native.items()})
         con.executemany("UPDATE tracks SET native_color_position=? WHERE path=?",
                         [(_native_position(p, native[p]) if p in native else None, p)
                          for (p,) in con.execute("SELECT path FROM tracks").fetchall()])
@@ -326,6 +335,25 @@ def refresh(bpm: float, con: sqlite3.Connection | None = None) -> None:
     except SystemExit as err:
         log(f"(hype not scored: {err})")
     export(bpm, con=con)
+
+
+def refresh_all_views(progress=log) -> list[str]:
+    """Every tempo view again with the current colour model (after `colors train`, so a view never keeps
+    the previous model's colours). Only the views' own databases change, not Traktor. This process's normal
+    cache and database are restored afterwards."""
+    saved = analysis.CACHE_DB, analysis.CACHE_VERSION, collection.DB, collection.DEFAULT_CSV, dict(analysis.STRETCH)
+    done = []
+    try:
+        for d in sorted(HOME.glob("at-*")):
+            if (d / "collection.db").exists():
+                progress(f"Refreshing the tempo view {d.name} with the new model...")
+                refresh(float(d.name[3:]))
+                done.append(d.name)
+    finally:
+        analysis.CACHE_DB, analysis.CACHE_VERSION, collection.DB, collection.DEFAULT_CSV = saved[:4]
+        analysis.STRETCH.clear()
+        analysis.STRETCH.update(saved[4])
+    return done
 
 
 # ----------------------------------------------------------------------------

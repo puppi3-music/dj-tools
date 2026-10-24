@@ -78,7 +78,9 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
   our own input pipeline (`_maest_patches`: MusiCNN mels, (x − 2.0676)/(2·1.2683), 1876-frame patches, hop 1875,
   one patch per run: the graph has batch size 1). Verified identical to TensorflowPredictMAEST (max diff 2e-7).
   Cached in cache.db `deep` (`maest`, `maest_styles`), so rescans skip MAEST. A failure on one track doesn't
-  disable MAEST for the rest of the worker; only load failures do.
+  disable MAEST (or any mood/instrument/vocals/extra head) for the rest of the worker; only load failures do. A head
+  that failed on a track leaves it out of the cache, so `deep_missing` (moods included) asks for it again, and
+  `predict_color` returns None when a downloaded mood wasn't measured (rather than color_inputs' 0.5 default).
 - `tag --multi` writes "A; B" when the runner-up ≥ 70% of top and names don't overlap.
 - Mood: EffNet heads mood_{aggressive,happy,party,relaxed,sad} (`model/Softmax`), optional downloads.
 - Instruments: `mtg_jamendo_instrument` head (40 classes, main section) + `voice_instrumental` head (`vocals` mean /
@@ -121,7 +123,8 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
 ### Tempo view (`tempo.py`)
 - `analysis.stretch()` = Rubber Band CLI R3 (`brew install rubberband`, 4.0); `analyze_file(tempo=(src, target),
   genre_bpm=target)`. Source BPM = Traktor's, else ours. BPM is set to the target, not measured on stretched audio.
-  The colour model gets the track's OWN BPM (feeding it the target alone moved colours −0.30 on average).
+  The colour model gets OUR BPM measured at the track's own tempo (`analyze_file(own_bpm=…)`, `refresh_predictions(own_bpm=…)`),
+  as the native position does, so the shift is the tempo's alone (with Traktor's BPM, tracks 1-2 BPM apart shifted ~+0.13 extra on a test collection).
 - Separate data in `data/at-<bpm>/` (cache.db with CACHE_VERSION + "|tempo-<bpm>", collection.db with
   extra `source_bpm`, `native_color_position`; `traktor_bpm` = target, so BPM_SQL gives the target). A changed source
   BPM drops that track's view cache. Models + colour model shared, never retrained on the view.
@@ -183,10 +186,18 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
 - Colour confidence used to be 1 − 2·|pos − round(pos)|, which gave the model's hedges (pos ≈ 4.0) confidence 1.0.
 - Smartlist exclusions match the other genre's full name ("Techno" excludes "Melodic House & Techno").
 - `scan --write-tags`: Traktor's BPM/key must be attached to the row before tags are written.
-- `save_row` is `INSERT OR REPLACE` over `NAMES`: columns not in the scan result (`hype`, view-only columns) are
-  wiped until recomputed.
-- NFC vs NFD paths create duplicate rows (`_drop_decomposed_duplicates`); Syncthing `*.sync-conflict-*` copies and
-  6-channel FLACs (Essentia's AudioLoader rejects them) need care.
+- `save_row` is `INSERT OR REPLACE` over `NAMES`: columns not in the scan result are wiped until recomputed
+  (view-only `source_bpm`/`native_color_position`; `hype` is in `KEEP_ON_RESCAN`).
+- NFC vs NFD paths create duplicate rows (`_drop_decomposed_duplicates`). Syncthing `*.sync-conflict-*` copies are
+  skipped by `scan` (and earlier rows dropped). >2-channel files (Essentia's AudioLoader rejects them) are mixed down to
+  stereo by ffmpeg (`_load_downmixed`, float). Rows for files that are gone are dropped by every scan unless they're on
+  a /Volumes drive that isn't mounted.
+- `scan` recomputes hype after analysing anything (it's a rank within the collection); `hype` is also kept on rescan.
+- `refresh_predictions` clears a track's prediction when the current model can't place it (no stale colours).
+- `stretch` writes 32-bit float WAV for Rubber Band (16-bit input clipped peaks above full scale; R3 output then
+  differs in phase only: style scores ±0.004, same key, LUFS ±0.001). R3 stays: accuracy over speed.
+- `mix_suggestions` same genre = exact genre name (genre/genre_2/my_genre, the columns it always searched), as the Smartlists; `search(genre=)`
+  stays a substring search over genres, styles and the genre tag.
 
 ## Tried, no gain (don't retry without a new idea)
 - Colour model: hype as a feature; approachability/energy-arc alone over MAEST+sound; direct distortion measures

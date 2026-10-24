@@ -17,8 +17,10 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
 import hashlib
 import json
+import math
 import sqlite3
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -282,12 +284,14 @@ EFFNET_WIN = 128 * 256
 
 
 def window_energy_db(mono16: np.ndarray, n: int, hop: int = EFFNET_HOP, win: int = EFFNET_WIN) -> np.ndarray:
-    x = np.asarray(mono16, dtype=np.float32)
+    """Mean power (dB) of each EffNet window; windows past the end are -120, the last ones may be partial."""
+    x = np.asarray(mono16, dtype=np.float64)
+    csum = np.concatenate([[0.0], np.cumsum(x * x)])
+    start = np.arange(n) * hop
+    end = np.minimum(start + win, len(x))
     out = np.full(n, -120.0, dtype=np.float32)
-    for i in range(n):
-        seg = x[i * hop: i * hop + win]
-        if len(seg):
-            out[i] = 10 * np.log10(float(np.mean(seg * seg)) + 1e-12)
+    ok = end > start
+    out[ok] = 10 * np.log10((csum[end[ok]] - csum[start[ok]]) / (end[ok] - start[ok]) + 1e-12)
     return out
 
 
@@ -334,16 +338,26 @@ def mood_models() -> dict:
 
 
 def run_moods(emb: np.ndarray, mask: np.ndarray) -> dict:
-    """Mood scores 0-1 (share of the main section that sounds aggressive, happy, ...)."""
+    """Mood scores 0-1 (share of the main section that sounds aggressive, happy, ...). A head that fails
+    on this track is left out for this track only (the cache then counts it as missing, see deep_missing)."""
     out = {}
-    for m, (model, idx) in list(mood_models().items()):
+    for m, (model, idx) in mood_models().items():
         try:
             p = np.asarray(model(emb), dtype=np.float32).reshape(len(emb), -1)
             out[m] = round(float(p[mask, idx].mean()), 3)
         except Exception as err:
-            log(f"mood model {m} failed ({err}); skipping it")
-            _moods["loaded"].pop(m, None)
+            log(f"mood model {m} failed on this track ({err})")
     return out
+
+
+def moods_missing(cached: dict | None) -> bool:
+    """True if a cached moods dict lacks a mood the loaded heads can measure."""
+    return not set(mood_models()) <= set(cached or {})
+
+
+def mood_heads_present() -> list[str]:
+    """Moods whose head is downloaded (a file check: doesn't load TensorFlow)."""
+    return [m for m in MOODS if _head_present(f"mood_{m}-discogs-effnet-1")]
 
 
 _instr: dict = {}
@@ -426,17 +440,15 @@ def run_instruments(emb: np.ndarray, mask: np.ndarray) -> dict | None:
         try:
             p = np.asarray(model(emb), dtype=np.float32).reshape(len(emb), -1)
             out.update({c: round(float(v), 3) for c, v in zip(instrument_classes(), p[mask].mean(axis=0))})
-        except Exception as err:
-            log(f"instrument model failed ({err}); skipping it")
-            _instr["model"], _instr["why"] = None, f"{type(err).__name__}: {err}"
+        except Exception as err:  # this track only; a load failure (instrument_model) is what turns it off
+            log(f"instrument model failed on this track ({err})")
     voice = voice_model()
     if voice is not None:
         try:
             v = np.asarray(voice[0](emb), dtype=np.float32).reshape(len(emb), -1)[:, voice[1]]
             out.update(vocals=round(float(v.mean()), 3), vocal_share=round(float((v > 0.5).mean()), 3))
-        except Exception as err:
-            log(f"vocals model failed ({err}); skipping it")
-            _instr["voice"], _instr["why"] = None, f"{type(err).__name__}: {err}"
+        except Exception as err:  # this track only
+            log(f"vocals model failed on this track ({err})")
     return out or None
 
 
@@ -489,12 +501,11 @@ def energy_arc(short_term: np.ndarray) -> dict:
 def run_extras(emb: np.ndarray, short_term: np.ndarray) -> dict:
     """Approachability/engagement (whole track) + energy arc."""
     out = energy_arc(short_term)
-    for h, model in list(extra_heads().items()):
+    for h, model in extra_heads().items():
         try:
             out[h] = round(float(np.asarray(model(emb), dtype=np.float32).reshape(len(emb), -1)[:, 0].mean()), 3)
-        except Exception as err:
-            log(f"{h} model failed ({err}); skipping it")
-            _instr["extra"].pop(h, None)
+        except Exception as err:  # this track only; extras_missing then asks for it again
+            log(f"{h} model failed on this track ({err})")
     return out
 
 
@@ -595,6 +606,8 @@ def predict_color(emb_mean: np.ndarray, acts_mean: np.ndarray | None, info: dict
         return None  # needs instrument scores we don't have (or the tagger changed since training)
     if "arc" in FEATURE_SETS[b["feature_set"]] and extra is None:
         return None  # needs the energy arc / approachability we don't have for this track
+    if any(info.get(f"mood_{m}") is None for m in mood_heads_present()):
+        return None  # a mood wasn't measured for this track; color_inputs would put a made-up 0.5 there
     x = color_features(color_inputs(emb_mean, acts_mean, info, maest, instruments, extra),
                        b["feature_set"]).reshape(1, -1)
     if b["kind"] == "classes":
@@ -749,7 +762,7 @@ def fold_bpm(bpm: float) -> float:
 
 def round_bpm(bpm: float | None) -> int | None:
     """BPMs are whole numbers everywhere (stored, shown, judged); the user's choice 2026-10-22."""
-    return int(round(float(bpm))) if bpm else None
+    return int(math.floor(float(bpm) + 0.5)) if bpm else None  # halves up, as SQLite's ROUND (Python's round() goes to even)
 
 
 def fmt_time(sec: float) -> str:
@@ -784,11 +797,18 @@ def split_style(label: str) -> tuple[str, str]:
 
 
 _db_ready: dict = {}
+_db_local = threading.local()  # one open connection per thread and cache file (sqlite3 connections are per thread)
 
 
 def _db() -> sqlite3.Connection:
+    cons = _db_local.__dict__.setdefault("cons", {})
+    con = cons.get(str(CACHE_DB))
+    if con is not None and CACHE_DB.exists():
+        return con
+    if not CACHE_DB.exists():
+        _db_ready.pop(str(CACHE_DB), None)  # deleted meanwhile: create the tables again
     HOME.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(CACHE_DB, timeout=60)  # several scan workers may write at once
+    con = cons[str(CACHE_DB)] = sqlite3.connect(CACHE_DB, timeout=60)  # several scan workers may write at once
     if _db_ready.get(str(CACHE_DB)):
         return con
     con.execute(
@@ -860,7 +880,10 @@ def _recover_key(con: sqlite3.Connection, p: Path, key: str) -> bool:
 
 
 def _get(sql: str, p: Path):
-    key = _cache_key(p)
+    try:
+        key = _cache_key(p)
+    except FileNotFoundError:
+        return None  # the file is gone: nothing cached for it counts
     with _db() as con:
         row = con.execute(sql, (key,)).fetchone()
         if row is None and _recover_key(con, p, key):
@@ -908,7 +931,7 @@ def deep_put(p: Path, maest: np.ndarray | None, moods: dict, instruments: dict |
 
 def deep_missing(hit) -> bool:
     """True if a deep_get() result lacks something the downloaded models can add."""
-    return (hit is None or (hit[0] is None and maest_available())
+    return (hit is None or (hit[0] is None and maest_available()) or moods_missing(hit[1])
             or instruments_missing(hit[2]) or extras_missing(hit[3]))
 
 
@@ -966,30 +989,61 @@ def stretch(stereo: np.ndarray, sr: float, src_bpm: float, target_bpm: float) ->
     import shutil
     import subprocess
     import tempfile
-    import wave
 
     exe = shutil.which("rubberband") or shutil.which("rubberband", path="/opt/homebrew/bin:/usr/local/bin")
     if not exe:
         raise SystemExit("Rubber Band isn't installed: brew install rubberband")
-    pcm = (np.clip(stereo, -1.0, 1.0) * 32767.0).astype("<i2")
     with tempfile.TemporaryDirectory(prefix="track-analyzer-") as tmp:
         src, out = Path(tmp) / "in.wav", Path(tmp) / "out.wav"
-        with wave.open(str(src), "wb") as w:
-            w.setnchannels(pcm.shape[1])
-            w.setsampwidth(2)
-            w.setframerate(int(sr))
-            w.writeframes(pcm.tobytes())
+        _write_float_wav(src, stereo, int(sr))  # float in, float out: Rubber Band keeps the input's format
         subprocess.run([exe, "-3", "-q", "--tempo", f"{src_bpm:.4f}:{target_bpm:.4f}", str(src), str(out)],
                        check=True, capture_output=True)
         audio, _sr, *_ = es().AudioLoader(filename=str(out))()
     return audio
 
 
+def _write_float_wav(path: Path, audio: np.ndarray, sr: int) -> None:
+    """32-bit float WAV (format 3): no rounding to 16 bits and no clipping of peaks above full scale."""
+    import struct
+
+    data = np.ascontiguousarray(audio, dtype="<f4")
+    ch = data.shape[1] if data.ndim == 2 else 1
+    with open(path, "wb") as f:
+        f.write(b"RIFF" + struct.pack("<I", 4 + 26 + 12 + 8 + data.nbytes) + b"WAVE")
+        f.write(b"fmt " + struct.pack("<IHHIIHHH", 18, 3, ch, sr, sr * ch * 4, ch * 4, 32, 0))
+        f.write(b"fact" + struct.pack("<II", 4, len(data)))
+        f.write(b"data" + struct.pack("<I", data.nbytes))
+        f.write(data.tobytes())
+
+
+def _load_downmixed(p: Path):
+    """Files with more than 2 channels (5.1 FLACs): Essentia's AudioLoader refuses them, so ffmpeg mixes
+    them down to stereo with its standard downmix, at the file's own rate, as float (no rounding)."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError(f"{p.name} has more than 2 channels; install ffmpeg (brew install ffmpeg) to read it")
+    with tempfile.TemporaryDirectory(prefix="track-analyzer-") as tmp:
+        out = Path(tmp) / "stereo.wav"
+        done = subprocess.run(["ffmpeg", "-v", "error", "-i", str(p), "-map", "0:a:0", "-ac", "2",
+                               "-c:a", "pcm_f32le", str(out)], capture_output=True, text=True)
+        if done.returncode:
+            raise RuntimeError(f"ffmpeg couldn't mix {p.name} down to stereo: {done.stderr.strip()}")
+        return es().AudioLoader(filename=str(out))()
+
+
 def load_audio(p: Path, tempo: tuple[float, float] | None = None):
     """Decode once; return stereo (native rate), mono 44.1k, mono 16k, rate.
     tempo: (track's BPM, BPM to play it at) to hear it sped up / slowed down with key lock."""
     e = es()
-    stereo, sr, nch, *_ = e.AudioLoader(filename=str(p))()
+    try:
+        stereo, sr, nch, *_ = e.AudioLoader(filename=str(p))()
+    except RuntimeError as err:
+        if "more than 2 channels" not in str(err):
+            raise
+        stereo, sr, nch, *_ = _load_downmixed(p)
     if tempo:
         stereo = stretch(stereo, sr, *tempo)
     mono = e.MonoMixer()(stereo, nch)
@@ -1121,13 +1175,25 @@ def check_rules() -> None:
         log(f"dj_genres.json: {len(dj_rules())} DJ genres, all style names valid")
 
 
-def predict_my_genre(emb_mean: np.ndarray, top: int = 3):
+_genre_bundle: dict = {}
+
+
+def my_genre_model():
+    """The model trained by `train`, loaded once per process (again after a retrain), or None."""
     if not GENRE_MODEL.exists():
         return None
-    import joblib
+    mtime = GENRE_MODEL.stat().st_mtime
+    if _genre_bundle.get("mtime") != mtime:
+        import joblib
 
-    bundle = joblib.load(GENRE_MODEL)
-    clf = bundle["model"]
+        _genre_bundle.update(mtime=mtime, model=joblib.load(GENRE_MODEL)["model"])
+    return _genre_bundle["model"]
+
+
+def predict_my_genre(emb_mean: np.ndarray, top: int = 3):
+    clf = my_genre_model()
+    if clf is None:
+        return None
     probs = clf.predict_proba(emb_mean.reshape(1, -1))[0]
     order = np.argsort(probs)[::-1][:top]
     return [{"genre": clf.classes_[i], "confidence": round(float(probs[i]), 3)} for i in order]
@@ -1148,11 +1214,12 @@ def track_embedding(p: Path):
 def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool = True,
                  genre_bpm: float | None = None, tempo: tuple[float, float] | None = None,
                  progress: bool = False, tracklist: tuple | None = None, highlights: int = 0,
-                 clip_seconds: float = 40.0) -> dict:
+                 clip_seconds: float = 40.0, own_bpm: float | None = None) -> dict:
     """tracklist: (plays, history path, recording start) from tracklist.py, for a mix: adds a per-track
     report and judges genres at the tracks' own BPMs. genre_bpm: a BPM to judge the genre rules by instead of the measured one (scan passes
     Traktor's, which the user may have corrected by hand). tempo: (track's BPM, BPM to play it at)
-    analyses the track sped up / slowed down with key lock (`tempo scan`). progress: print the stage
+    analyses the track sped up / slowed down with key lock (`tempo scan`). own_bpm: with tempo, the BPM we
+    measured at the track's own tempo, for the colour model (trained on those; defaults to tempo[0]). progress: print the stage
     being worked on to stderr (the `analyze` command)."""
     def say(msg: str) -> None:
         if progress:
@@ -1247,8 +1314,12 @@ def analyze_file(path: str, segment_seconds: float | None = None, timeline: bool
         if "approachability" in extra:
             result["approachability"] = extra["approachability"]
         if not is_mix:
-            info = {"bpm": round_bpm(tempo[0]) if tempo else result.get("bpm"), "lufs": lufs, "loudness_range": lra, "key": result.get("key"),
-                    "key_strength": result.get("key_strength"), **{f"mood_{m}": v for m, v in moods.items()}}
+            # exactly the values collection.db stores, which `colors train` learns from and refresh_predictions
+            # reads back: the calibrator is a step function, so even rounding differences can move a colour
+            info = {"bpm": round_bpm(own_bpm or tempo[0]) if tempo else result.get("bpm"),
+                    "lufs": result["loudness"]["integrated_lufs"], "loudness_range": result["loudness"]["loudness_range_lu"],
+                    "key": result.get("key"), "key_strength": result.get("key_strength"),
+                    **{f"mood_{m}": v for m, v in moods.items()}}
             deep_put(p, maest_emb, moods, instruments, extra, maest_mean)  # so `colors` needn't decode again
             col = predict_color(emb_mean, acts_mean, info, maest_emb, instruments, extra)
             if col:
@@ -1342,11 +1413,7 @@ def segment_timeline(mono44, short, emb, acts, duration, seg_sec, pool: AudioPoo
     timeline = []
     n_seg = max(1, int(np.ceil(duration / seg_sec)))
     have_model = emb is not None and len(emb) > 0
-    model = None
-    if have_model and GENRE_MODEL.exists():
-        import joblib
-
-        model = joblib.load(GENRE_MODEL)["model"]
+    model = my_genre_model() if have_model else None
     spans = [(i * seg_sec, min(duration, (i + 1) * seg_sec)) for i in range(n_seg)]
     spans = [(a, b) for a, b in spans if b - a >= 20]
     jobs = [(a, b, True, True) for a, b in spans]

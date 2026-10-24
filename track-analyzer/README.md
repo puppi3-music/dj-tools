@@ -494,7 +494,7 @@ Tip: in Finder, hold **Option**, right-click a file and choose **Copy "…" as P
 | Tool | What it does |
 |---|---|
 | `search_collection(genre, bpm_min, bpm_max, camelot, harmonic, text, color, order, include_mixes, limit)` | Instant search of the scanned collection. `harmonic` adds compatible keys (±1 on the wheel, relative major/minor). `color` matches your colour, else the predicted one. `order`: bpm, genre, key, loudness, artist, recent or color. |
-| `mix_suggestions(track, bpm_tolerance_pct=4, same_genre=true, limit=20)` | Tracks that mix with one you name: close BPM, compatible key, by default the same subgenre. |
+| `mix_suggestions(track, bpm_tolerance_pct=4, same_genre=true, limit=20)` | Tracks that mix with one you name: close BPM, compatible key, by default the same subgenre (exactly that genre name, as the genre Smartlists). |
 | `collection_stats()` | Tracks per subgenre with average BPM, common keys, BPM histogram, tracks per colour. |
 | `analyze_track(path, segment_seconds?)` | Full analysis of one file; long files get a mix timeline. |
 | `analyze_folder(folder, limit=25)` | One line per track in a folder: BPM, Camelot, LUFS, top style, your genre. |
