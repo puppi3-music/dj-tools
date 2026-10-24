@@ -434,8 +434,10 @@ def untag(roots: list[str] | None, dry_run: bool = False) -> dict:
 def nfc(path: str | Path) -> Path:
     """macOS hands out accented file names decomposed (é = e + accent), Traktor stores them
     composed. Use the composed form everywhere so both refer to the same track (the Mac's file
-    system opens either spelling)."""
-    return Path(unicodedata.normalize("NFC", str(path)))
+    system opens either spelling). Linux file systems don't: there the composed form is used only
+    when a file has that name."""
+    composed = unicodedata.normalize("NFC", str(path))
+    return Path(composed if sys.platform == "darwin" or os.path.exists(composed) else path)
 
 
 def _drop_decomposed_duplicates(con: sqlite3.Connection) -> None:
@@ -458,7 +460,13 @@ def _missing_for_good(path: str) -> bool:
     if os.path.exists(path):
         return False
     parts = Path(path).parts
-    return not (len(parts) > 2 and parts[1] == "Volumes") or os.path.isdir(os.path.join(*parts[:3]))
+    if len(parts) > 2 and parts[1] == "Volumes":  # macOS: another drive
+        return os.path.isdir(os.path.join(*parts[:3]))
+    # Linux: /media/<user>/<disk>, /run/media/<user>/<disk>, /mnt/<disk> (an unplugged disk's folder may stay, empty)
+    n = {"media": 4, "run": 5, "mnt": 3}.get(parts[1] if len(parts) > 1 else "", 0)
+    if n and sys.platform.startswith("linux") and len(parts) > n and (parts[1] != "run" or parts[2] == "media"):
+        return os.path.ismount(os.path.join(*parts[:n]))
+    return True
 
 
 def find_audio(roots: list[str]) -> list[Path]:

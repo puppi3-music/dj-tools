@@ -181,10 +181,7 @@ def scan(bpm: float = DEFAULT_BPM, workers: int | None = None, rescan: bool = Fa
     if not analysis.models_present():
         raise SystemExit("Style models missing. Run `uv run dj-track-analyzer setup` first.")
     analysis.warn_if_maest_missing()
-    import shutil
-
-    if not (shutil.which("rubberband") or shutil.which("rubberband", path="/opt/homebrew/bin:/usr/local/bin")):
-        raise SystemExit("Rubber Band isn't installed: brew install rubberband")
+    analysis.rubberband()  # installed and new enough, before any work
     native = native_rows()
     tk = collection.load_traktor_info(nml)  # Traktor's BPM (maybe corrected by hand) wins, as in `scan`
     src = {}

@@ -983,16 +983,54 @@ def cache_put(p: Path, duration: float, emb: np.ndarray, styles: np.ndarray) -> 
 # ----------------------------------------------------------------------------
 
 
+TOOL_DIRS = "/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin"  # Homebrew's, when PATH lacks them
+APT_NAMES = {"rubberband": "rubberband-cli"}  # Debian/Ubuntu packages named differently from the command
+
+
+def find_tool(name: str) -> str | None:
+    """ffmpeg / ffprobe / rubberband / brew: on PATH or in Homebrew's folders."""
+    import shutil
+
+    return shutil.which(name) or shutil.which(name, path=TOOL_DIRS)
+
+
+def install_hint(name: str) -> str:
+    """How to install ffmpeg or rubberband on this system."""
+    if sys.platform == "darwin":
+        return f"brew install {name}"
+    return f"sudo apt install {APT_NAMES.get(name, name)} (or your distribution's package manager)"
+
+
+_rubberband_exe: str | None = None
+
+
+def rubberband() -> str:
+    """The Rubber Band command, version 3 or newer (the R3 engine, `-3`; Ubuntu 22.04 still ships 2.0)."""
+    global _rubberband_exe
+    if _rubberband_exe:
+        return _rubberband_exe
+    import re
+    import subprocess
+
+    exe = find_tool("rubberband")
+    if not exe:
+        raise SystemExit(f"Rubber Band isn't installed: {install_hint('rubberband')}")
+    v = subprocess.run([exe, "--version"], capture_output=True, text=True)
+    m = re.match(r"(\d+)\.[\d.]*", (v.stdout or v.stderr).strip())
+    if m and int(m.group(1)) < 3:
+        raise SystemExit(f"Rubber Band {m.group(0)} is too old: the tempo view needs 3.0 or newer (its R3 engine). "
+                         "Newer distributions have it, or get it from breakfastquay.com/rubberband.")
+    _rubberband_exe = exe
+    return exe
+
+
 def stretch(stereo: np.ndarray, sr: float, src_bpm: float, target_bpm: float) -> np.ndarray:
     """Change the tempo from src_bpm to target_bpm keeping the pitch (like Traktor's key lock), with
     Rubber Band's R3 engine. Traktor uses its own stretcher (élastique), so this sounds close, not identical."""
-    import shutil
     import subprocess
     import tempfile
 
-    exe = shutil.which("rubberband") or shutil.which("rubberband", path="/opt/homebrew/bin:/usr/local/bin")
-    if not exe:
-        raise SystemExit("Rubber Band isn't installed: brew install rubberband")
+    exe = rubberband()
     with tempfile.TemporaryDirectory(prefix="track-analyzer-") as tmp:
         src, out = Path(tmp) / "in.wav", Path(tmp) / "out.wav"
         _write_float_wav(src, stereo, int(sr))  # float in, float out: Rubber Band keeps the input's format
@@ -1024,7 +1062,7 @@ def _load_downmixed(p: Path):
     import tempfile
 
     if not shutil.which("ffmpeg"):
-        raise RuntimeError(f"{p.name} has more than 2 channels; install ffmpeg (brew install ffmpeg) to read it")
+        raise RuntimeError(f"{p.name} has more than 2 channels; install ffmpeg ({install_hint('ffmpeg')}) to read it")
     with tempfile.TemporaryDirectory(prefix="track-analyzer-") as tmp:
         out = Path(tmp) / "stereo.wav"
         done = subprocess.run(["ffmpeg", "-v", "error", "-i", str(p), "-map", "0:a:0", "-ac", "2",

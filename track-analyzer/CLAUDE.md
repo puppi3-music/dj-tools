@@ -2,10 +2,10 @@
 
 Local music-analysis tool for DJs: BPM, key/Camelot, subgenre, mood, a learned Traktor colour scale and a hype
 score, synced into Traktor Pro 4 (optionally Lexicon), plus an MCP server for local LLMs (LM Studio, Open WebUI).
-macOS, Python 3.11 via `uv`. Data dir: `data/` (`TRACK_ANALYZER_HOME`).
+macOS and Linux x86_64 (Linux has no Traktor: those steps say so), Python 3.11 via `uv`. Data dir: `data/` (`TRACK_ANALYZER_HOME`).
 
 Docs: README.md (install + full reference), docs/GUIDE.html (task-first guide, self-contained, opened in a browser),
-docs/IDEAS.md (features, ideas, tried-and-failed). Keep them in sync when commands, options or numbers change: the
+docs/IDEAS.md (features, ideas, tried-and-failed), docs/WINDOWS.md (what a Windows port needs). Keep them in sync when commands, options or numbers change: the
 `/update-docs` skill does this (`.claude/skills/update-docs/scripts/doc_drift.py` lists CLI options the docs miss).
 Public docs stay impersonal: numbers come from "a test collection of about 470 tracks", no personal track names.
 
@@ -22,7 +22,8 @@ details go there, never in this file.
 Code is the package `src/dj_track_analyzer/` (relative imports; uv installs it editable). Run it as
 `uv run dj-track-analyzer <command>` (entry point `cli:main`; no command = MCP over stdio) or `python -m dj_track_analyzer`.
 Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_track_analyzer import …`.
-- `analysis.py`: config, model loading, caches, `analyze_file`, custom genre training.
+- `analysis.py`: config, model loading, caches, `analyze_file`, custom genre training. `find_tool()` (PATH + Homebrew
+  folders), `install_hint()` (brew on a Mac, apt on Linux), `rubberband()` (refuses < 3.0: the R3 engine).
   `color_model()` aliases `sys.modules["colors"]` because bundles trained before the package move pickled
   `colors.BlockWeights` under that name.
 - `cli.py`: argparse CLI (`main`). `mcp_server.py`: `build_mcp()` (mcp SDK **2.x**:
@@ -260,7 +261,8 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
 - NFC vs NFD paths create duplicate rows (`_drop_decomposed_duplicates`). Syncthing `*.sync-conflict-*` copies are
   skipped by `scan` (and earlier rows dropped). >2-channel files (Essentia's AudioLoader rejects them) are mixed down to
   stereo by ffmpeg (`_load_downmixed`, float). Rows for files that are gone are dropped by every scan unless they're on
-  a /Volumes drive that isn't mounted.
+  a drive that isn't mounted (/Volumes/<disk>; Linux /media, /run/media, /mnt via ismount). `nfc()` composes a
+  path on macOS always, on Linux only if that spelling exists (ext4 compares bytes).
 - `scan` recomputes hype after analysing anything (it's a rank within the collection); `hype` is also kept on rescan.
 - `refresh_predictions` clears a track's prediction when the current model can't place it (no stale colours).
 - `stretch` writes 32-bit float WAV for Rubber Band (16-bit input clipped peaks above full scale; R3 output then

@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 import uuid
 import xml.etree.ElementTree as ET
@@ -89,6 +90,9 @@ def find_collection(nml: str | None = None) -> Path:
             raise SystemExit(f"{p} does not exist")
         return p
     candidates = glob.glob(os.path.expanduser("~/Documents/Native Instruments/Traktor*/collection.nml"))
+    if not candidates and sys.platform.startswith("linux"):
+        raise SystemExit("Traktor doesn't run on Linux, so the Traktor steps are skipped. Everything else works on "
+                         "your music folders.")
     if not candidates:
         raise SystemExit("Couldn't find Traktor's collection.nml in ~/Documents/Native Instruments/. "
                          "Pass its location with --nml /path/to/collection.nml")

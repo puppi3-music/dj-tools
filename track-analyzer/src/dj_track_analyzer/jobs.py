@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
@@ -20,14 +19,14 @@ from pathlib import Path
 from . import analysis, collection, traktor
 from .analysis import HOME, log
 
-BREW = shutil.which("brew") or next((b for b in ("/opt/homebrew/bin/brew", "/usr/local/bin/brew") if os.path.exists(b)), None)
+BREW = analysis.find_tool("brew")
 ERROR_MARK = "\x1eTRACK-ANALYZER-ERROR "  # the child's last line when it stops with a message (SystemExit)
 PROGRESS = re.compile(r"^\s*\[(\d+)/(\d+)\s+~(.+?) left\]")  # "[12/470  ~31m left] …" from scan, tempo scan, cues, colours
 KEEP_LINES = 3000
 
 
 def _tool(name: str) -> str | None:
-    return shutil.which(name) or shutil.which(name, path="/opt/homebrew/bin:/usr/local/bin")
+    return analysis.find_tool(name)
 
 
 def _bpm(o: dict) -> str:
@@ -60,7 +59,7 @@ def _tool_install(o: dict) -> list[str]:
     if o.get("tool") not in ("ffmpeg", "rubberband"):
         raise ValueError("unknown tool")
     if not BREW:
-        raise ValueError("Homebrew isn't installed: see https://brew.sh")
+        raise ValueError(f"Homebrew isn't installed. In a terminal: {analysis.install_hint(o['tool'])}")
     return [BREW, "install", o["tool"]]
 
 
@@ -305,6 +304,8 @@ def setup_status() -> dict:
     st["models"] = {"ready": analysis.models_present(), "maest": analysis.maest_present(),
                     "folder": str(analysis.MODELS_DIR)}
     st["tools"] = {"ffmpeg": bool(_tool("ffmpeg")), "rubberband": bool(_tool("rubberband"))}
+    st["mac"] = sys.platform == "darwin"
+    st["install_hint"] = {t: analysis.install_hint(t) for t in st["tools"]}  # shown when there's no Homebrew
     try:
         nml = traktor.find_collection(None)
         st["traktor"] = {"collection": str(nml), **{k: v for k, v in _traktor_side(nml).items() if k != "files"}}

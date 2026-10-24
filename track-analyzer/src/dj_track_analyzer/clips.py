@@ -139,7 +139,9 @@ def _label(c: dict) -> str:
 
 def main(args) -> None:
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
-        raise SystemExit("clips needs ffmpeg: brew install ffmpeg")
+        from .analysis import install_hint
+
+        raise SystemExit(f"clips needs ffmpeg: {install_hint('ffmpeg')}")
     video, analysis = Path(args.video).expanduser(), Path(args.analysis).expanduser()
     if not video.is_file():
         raise SystemExit(f"No video at {video}")

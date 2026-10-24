@@ -436,11 +436,9 @@ SAMPLE_FORMAT = 3  # saved samples: 2 = edge fades, 3 = also on Traktor's MP3 ti
 
 
 def _ffmpeg() -> str:
-    import shutil
-
-    exe = shutil.which("ffmpeg") or shutil.which("ffmpeg", path="/opt/homebrew/bin:/usr/local/bin")
+    exe = analysis.find_tool("ffmpeg")
     if not exe:
-        raise ValueError("ffmpeg isn't installed (brew install ffmpeg)")
+        raise ValueError(f"ffmpeg isn't installed ({analysis.install_hint('ffmpeg')})")
     return exe
 
 
