@@ -69,9 +69,19 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
   `hype.find(rescore=False)`, `colors.review/kept`, `colors.explain(extract=False)`, `tempo.report/status`).
   `web.library()` swaps collection.DB + cache globals per request under a lock (tempo.view_db sets them) and
   restores them. Mixes/Files tabs read run output JSON from `logs/` (`--logs`; endpoints are /api/saved*, since
-  tracker blockers block `/api/log?`); `_json_in` tolerates teed stderr. Its only write: POST /api/hold (JSON
-  body + Origin check against CSRF). `--export` / /export = snapshot: page + `window.SNAPSHOT` (every tab's data,
+  tracker blockers block `/api/log?`); `_json_in` tolerates teed stderr. Writes: POST /api/hold, cue/sample endpoints (all JSON
+  body + Origin check against CSRF, `from_this_page`), and jobs (below). `--export` / /export = snapshot: page + `window.SNAPSHOT` (every tab's data,
   hype in 3 orders filtered client-side as hype.find does, default-rule mix suggestions per track, mix JSONs only).
+- `jobs.py`: the web page's Setup tab. `setup_status()` (models, tools, Traktor counts cached per NML mtime, scanned /
+  not-scanned / changed-on-disk-since-scan, models' mtimes, tempo views, last `traktor --undo` backup) and a one-at-a-time
+  job runner: `python -m dj_track_analyzer.jobs <cli args>` (= cli.main; a str SystemExit is sent as one ERROR_MARK
+  stderr line) in its own process group, stdin DEVNULL (so `colors review --apply` never asks; the page passes `--yes`
+  after a dry-run preview). Only `ACTIONS` (name → label, argv builder that validates options, writes?) can run; writers
+  get `--dry-run` for the preview; `UNDO` maps writer → undo action. Stop = SIGINT to the group (scans save), SIGTERM
+  after 20 s; `web.serve` stops a running job on exit. Log = stderr lines (`[n/total ~eta left]` → progress; `\r`
+  segments → `live`, curl's meter); result = the JSON on stdout. Routes /api/setup, /api/jobs?since=, /api/jobs/start,
+  /api/jobs/stop; `write_cues`/`undo_write` refuse while a job runs. `Start Track Analyzer.command` (repo folder):
+  installs uv if missing, `uv sync`, `exec uv run dj-track-analyzer web`; opens the page if 8766 already answers.
 - `cues.py`: `cues train|scan|show`. Traktor's grid (AutoGrid CUE_V2 TYPE 4 START ms + TEMPO BPM; `grids()`,
   read-only; your cues = TYPE 0 cue / 5 loop, LEN ms) → bars. Per bar (cache.db `bars`, keyed path+grid, valid
   while mutagen length is within 0.25 s): 6 band dB, 40 mel dB (2048 FFT, 10 ms hop, 44.1k mono), kick pulse

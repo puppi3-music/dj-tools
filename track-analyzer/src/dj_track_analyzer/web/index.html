@@ -46,7 +46,7 @@ h3 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
 .mono { font-family: var(--mono); font-size: 12px; }
 
 header { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
-.bar-top { display: flex; align-items: center; gap: 16px; padding: 10px 20px; flex-wrap: wrap; }
+.bar-top { display: flex; align-items: center; gap: 12px; padding: 10px 20px; flex-wrap: wrap; }
 .brand { font-weight: 700; font-size: 15px; white-space: nowrap; }
 .brand span { color: var(--text-3); font-weight: 500; }
 nav { display: flex; gap: 2px; flex-wrap: wrap; }
@@ -217,8 +217,44 @@ textarea { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 
 #tip { position: fixed; z-index: 60; pointer-events: none; background: var(--text); color: var(--surface); padding: 5px 8px; border-radius: 6px;
   font-size: 12px; max-width: 320px; white-space: pre-line; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
 
-#lib { max-width: 280px; }
+/* setup + jobs */
+nav a .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 6px; vertical-align: 1px; }
+.banner { padding: 8px 20px; font-size: 13px; background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border-top: 1px solid var(--line); }
+.jobbar { display: flex; gap: 10px; align-items: center; padding: 6px 20px; font-size: 12px; background: var(--accent-soft); border-top: 1px solid var(--line); flex-wrap: wrap; }
+.jobbar .progress { width: 160px; }
+.jobbar[hidden], .banner[hidden] { display: none; }
+.jobbar button { padding: 1px 10px; font-size: 12px; }
+.jobbar.bad { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); }
+.jobbar.good { background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
+.progress { height: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; flex: none; }
+.progress div { height: 100%; background: var(--accent); transition: width .4s; }
+.progress.indet div { width: 30%; animation: indet 1.4s infinite linear; }
+@keyframes indet { from { margin-left: -30%; } to { margin-left: 100%; } }
+pre.log { max-height: 280px; overflow: auto; font-family: var(--mono); font-size: 11.5px; line-height: 1.45; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; margin: 10px 0 0; white-space: pre-wrap; word-break: break-word; }
+.steps { display: grid; }
+.step { display: grid; grid-template-columns: 26px 1fr auto; gap: 4px 14px; padding: 14px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.step:first-child { padding-top: 4px; }
+.step:last-child { border-bottom: 0; padding-bottom: 0; }
+.step .ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  border: 1.5px solid var(--line-strong); color: var(--text-3); }
+.step.done .ic { background: var(--good); border-color: var(--good); color: #fff; }
+.step.todo .ic { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.step.blocked > div:nth-child(2) { opacity: .7; }
+.step .st { font-weight: 600; }
+.step > div { min-width: 0; overflow-wrap: anywhere; }
+.step .act { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; max-width: 460px; }
+.step .act input[type=text] { width: 230px; }
+button:disabled { opacity: .5; cursor: default; }
+dialog.write .warnbox { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line));
+  border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 13px; }
+
+#lib { max-width: 220px; }
 @media (max-width: 760px) {
+  .step { grid-template-columns: 26px 1fr; }
+  .step .act { grid-column: 2; justify-content: flex-start; max-width: none; }
+  .step .act input[type=text] { width: 100%; }
+  .banner, .jobbar { padding: 6px 16px; }
   .bar-top { padding: 10px 16px; gap: 8px; }
   nav { flex-wrap: nowrap; overflow-x: auto; width: 100%; order: 3; }
   nav a { padding: 6px 10px; white-space: nowrap; }
@@ -238,7 +274,7 @@ textarea { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 
     <div class="brand">Track Analyzer <span id="mode"></span></div>
     <nav id="nav">
       <a href="#overview">Overview</a><a href="#tracks">Tracks</a><a href="#hype">Hype</a><a href="#colours">Colours</a>
-      <a href="#tempo">Tempo view</a><a href="#mixes">Mixes</a><a href="#files">Files</a>
+      <a href="#tempo">Tempo view</a><a href="#mixes">Mixes</a><a href="#files">Files</a><a href="#setup">Setup</a>
     </nav>
     <div class="spacer"></div>
     <label class="inline small muted" id="libwrap">Library <select id="lib"></select></label>
@@ -246,6 +282,8 @@ textarea { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 
     <button id="theme" title="Switch light/dark">◐</button>
   </div>
   <div class="libnote" id="libnote" hidden></div>
+  <div class="jobbar" id="jobbar" hidden></div>
+  <div class="banner" id="setupnote" hidden></div>
 </header>
 <main id="main"><div class="loading">Loading…</div></main>
 <aside class="drawer" id="drawer" aria-hidden="true"><button class="close" onclick="closeDrawer()">✕</button><div id="drawer-body"></div></aside>
@@ -283,6 +321,7 @@ if (SNAP) {
   $("#mode").textContent = `· snapshot of ${SNAP.made}`;
   $("#export").remove();
   document.querySelector('#nav a[href="#files"]').remove();
+  document.querySelector('#nav a[href="#setup"]').remove();
 } else $("#mode").textContent = "· local";
 function snapHype(h, p) {
   const src = p.gems == 1 ? h.gems : p.least == 1 ? h.least : h.most;
@@ -335,7 +374,7 @@ async function api(path, params = {}) {
   for (let attempt = 0; ; attempt++) {
     try { r = await fetch(`/api/${path}${q.toString() ? "?" + q : ""}`); break; }
     catch (e) { // no answer at all: the server is restarting, or was stopped
-      if (attempt >= 2) throw new Error("Can't reach the Track Analyzer server. Is `uv run dj-track-analyzer web` still running in Terminal?");
+      if (attempt >= 2) throw new Error("Can't reach the Track Analyzer server. Start it again: double-click Start Track Analyzer.command, or run `uv run dj-track-analyzer web` in Terminal.");
       await new Promise(ok => setTimeout(ok, 600 * (attempt + 1)));
     }
   }
@@ -416,12 +455,13 @@ async function getTracks() {
 }
 
 // ---------- router ----------
-const PAGES = { overview: pageOverview, tracks: pageTracks, hype: pageHype, colours: pageColours, tempo: pageTempo, mixes: pageMixes, files: pageFiles };
+const PAGES = { overview: pageOverview, tracks: pageTracks, hype: pageHype, colours: pageColours, tempo: pageTempo, mixes: pageMixes, files: pageFiles, setup: pageSetup };
 async function route() {
   const [page, ...rest] = (location.hash.slice(1) || "overview").split("/");
   S.page = PAGES[page] ? page : "overview";
   document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + S.page));
   if (S.libs) libNote();
+  if (!SNAP) { jobBar(); refreshSetupNote(); }
   const main = $("#main"), me = S.routeId = (S.routeId || 0) + 1;
   main.innerHTML = `<div class="loading">Loading…</div>`;
   try { await PAGES[S.page](main, decodeURIComponent(rest.join("/"))); }
@@ -1202,7 +1242,8 @@ function cueTable(c, sugg) {
 const HF = { colour: "", bpm: "", tolerance: 4, key: "", gems: false, least: false };
 async function pageHype(main) {
   main.innerHTML = `
-    <div class="page-head"><div><h2>Hype</h2><div class="muted">1-10 within your collection: rave sound and energy. Uses the scores from the last scan.</div></div></div>
+    <div class="page-head"><div><h2>Hype</h2><div class="muted">1-10 within your collection: rave sound and energy. Uses the scores from the last scan.</div></div>
+      <div class="spacer"></div>${SNAP ? "" : `<button id="h-write" data-tip="Adds 'Hype 07' to Comment 2 in Traktor, after your own text (shows what changes first)">Write to Traktor's Comment 2…</button>`}</div>
     <div class="filters">
       <select id="h-colour"><option value="">Any colour</option>${COLOURS.map(c => `<option ${c === HF.colour ? "selected" : ""}>${c}</option>`).join("")}</select>
       <label class="inline">BPM <input type="number" id="h-bpm" value="${esc(HF.bpm)}" placeholder="any"> ± <input type="number" id="h-tol" value="${HF.tolerance}" style="width:56px">%</label>
@@ -1212,6 +1253,7 @@ async function pageHype(main) {
     </div><div id="hres" class="loading">Loading…</div>`;
   const read = () => { HF.colour = $("#h-colour").value; HF.bpm = $("#h-bpm").value; HF.tolerance = $("#h-tol").value; HF.key = $("#h-key").value; HF.gems = $("#h-gems").checked; HF.least = $("#h-least").checked; load(); };
   main.querySelectorAll(".filters select, .filters input").forEach(el => el.addEventListener("change", read));
+  $("#h-write")?.addEventListener("click", () => writeDialog("hype_traktor"));
   async function load() {
     const box = $("#hres");
     try {
@@ -1252,11 +1294,13 @@ async function pageColours(main) {
       </div>
       <div class="card"><h3>Tracks that disagree with their colour <span class="dim small">(cross-validated: predicted without seeing the track)</span></h3>
         <div class="note" style="margin:0 0 10px">${r.apply_threshold.tracks_meeting_it} meet the recolour threshold (gap ≥ ${r.apply_threshold.min_gap}, confidence ≥ ${pct(r.apply_threshold.min_confidence)}).
-        ${r.always_kept ? `${r.always_kept} you chose to keep always.` : ""} To recolour: <span class="mono">colors review --apply --dry-run</span></div>
+        ${r.always_kept ? `${r.always_kept} you chose to keep always.` : ""}
+        ${SNAP ? "" : `<button class="mini" id="c-recolour" style="margin-left:4px">Recolour them in Traktor…</button>`}</div>
         ${reviewTable(r.tracks.slice(0, 25))}
         ${r.tracks.length > 25 ? `<details><summary class="small muted" style="margin-top:8px;cursor:pointer">Show ${r.tracks.length - 25} more</summary>${reviewTable(r.tracks.slice(25))}</details>` : ""}
       </div>`;
     m.onclick = e => { const tr = e.target.closest("tr[data-path]"); if (tr) openTrack(tr.dataset.path); };
+    $("#c-recolour")?.addEventListener("click", e => { e.stopPropagation(); writeDialog("colors_recolour", {}, () => route()); });
   }
   const x = $("#c-explain"); x.className = "";
   if (ex.status === "rejected") { x.innerHTML = `<div class="card"><h3>Colour profile</h3>${errBox(ex.reason)}</div>`; return; }
@@ -1295,7 +1339,7 @@ async function pageColours(main) {
 // ---------- tempo ----------
 async function pageTempo(main, bpmArg) {
   const views = S.libs.libraries.filter(l => l.bpm);
-  if (!views.length) { main.innerHTML = `<h2>Tempo view</h2><div class="card">No tempo view scanned yet. Run <span class="mono">uv run dj-track-analyzer tempo scan --bpm 145</span>.</div>`; return; }
+  if (!views.length) { main.innerHTML = `<h2>Tempo view</h2><div class="card">No tempo view scanned yet. ${SNAP ? "" : `Scan one in <a href="#setup">Setup</a> (or run <span class="mono">uv run dj-track-analyzer tempo scan --bpm 145</span>).`}</div>`; return; }
   const bpm = +(bpmArg || views[0].bpm);
   const d = await api("tempo/report", { bpm, limit: 25 });
   const brief = rows => table([{ h: "Track", f: r => esc(r.track) }, { h: "BPM", r: 1, f: r => fmt(r.bpm) }, { h: "Genres", f: r => esc(r.genres) },
@@ -1306,7 +1350,8 @@ async function pageTempo(main, bpmArg) {
   const ordered = o => COLOURS.filter(c => o[c]).map(c => ({ label: c, value: o[c] }));
   main.innerHTML = `
     <div class="page-head"><div><h2>Tempo view: ${d.bpm} BPM</h2><div class="muted">Your catalogue as heard stretched to ${d.bpm} BPM with key lock, compared with each track at its own tempo.</div></div>
-      <div class="spacer"></div>${views.length > 1 ? `<select onchange="location.hash='tempo/'+this.value">${views.map(v => `<option value="${v.bpm}" ${v.bpm === bpm ? "selected" : ""}>${v.bpm} BPM</option>`).join("")}</select>` : ""}</div>
+      <div class="spacer"></div>${views.length > 1 ? `<select onchange="location.hash='tempo/'+this.value">${views.map(v => `<option value="${v.bpm}" ${v.bpm === bpm ? "selected" : ""}>${v.bpm} BPM</option>`).join("")}</select>` : ""}
+      ${SNAP ? "" : S.libs.loaded_view ? `<button id="tv-native">Switch Traktor back to normal…</button>` : `<button id="tv-load" data-tip="Traktor's genres, colours and hype as heard at ${d.bpm} BPM (shows what changes first; switch back any time)">Load into Traktor…</button>`}</div>
     <div class="tiles">
       <div class="tile"><div class="v">${d.tracks}</div><div class="l">tracks compared</div></div>
       <div class="tile"><div class="v">${d.tempo_change.median_pct > 0 ? "+" : ""}${d.tempo_change.median_pct}%</div><div class="l">median tempo change (${d.tempo_change.min_pct}% … +${d.tempo_change.max_pct}%)</div></div>
@@ -1330,7 +1375,310 @@ async function pageTempo(main, bpmArg) {
     <div class="card"><h3>Turn hardest at ${d.bpm} BPM</h3>${brief(d.hardest_turns)}</div>
     <div class="card"><h3>Turn prettiest</h3>${brief(d.prettiest_turns)}</div>
     <div class="grid two"><div class="card"><h3>Most hype at ${d.bpm} BPM</h3>${brief(d.most_hype)}</div><div class="card"><h3>Biggest hype risers</h3>${brief(d.hype_risers)}</div></div>`;
+  const lexicon = () => (S.libs.status.loaded_in_lexicon || "").includes("BPM");
+  $("#tv-load")?.addEventListener("click", () => writeDialog("tempo_load", { bpm: d.bpm }));
+  $("#tv-native")?.addEventListener("click", () => writeDialog("tempo_native", { lexicon: lexicon() }));
 }
+
+// ---------- jobs: the CLI's own commands, run by the server one at a time (jobs.py) ----------
+const JOB = { job: null, lines: [], since: 0, timer: 0, listeners: new Set(), waiters: [], seenEnd: undefined, flash: null, hidden: null };
+async function jobPoll() {
+  clearTimeout(JOB.timer);
+  let d;
+  try { d = await api("jobs", { since: JOB.since }); } catch (e) { JOB.timer = setTimeout(jobPoll, 3000); return; }
+  const j = d.job;
+  if (j && JOB.job && JOB.job.id !== j.id && JOB.since) { JOB.since = 0; JOB.job = null; return jobPoll(); }  // a newer job: its log from the start
+  if (j) {
+    if (!JOB.job || JOB.job.id !== j.id) JOB.lines = [];
+    JOB.lines.push(...j.lines);
+    if (JOB.lines.length > 3000) JOB.lines.splice(0, JOB.lines.length - 3000);
+    JOB.since = j.line_to; JOB.job = j;
+    if (!j.running) {
+      if (JOB.seenEnd !== j.id) { if (JOB.seenEnd !== undefined) jobEnded(j); JOB.seenEnd = j.id; }
+      JOB.waiters = JOB.waiters.filter(w => w.id !== j.id || (w.ok(j), false));
+    }
+  }
+  JOB.listeners.forEach(f => f());
+  jobBar();
+  if (j && j.running) JOB.timer = setTimeout(jobPoll, 1000);
+}
+// Start a job; resolves with the finished job (its result, or its error message).
+async function startJob(action, options = {}, dry_run = false) {
+  const d = await postJSON("/api/jobs/start", { action, options, dry_run });
+  if (JOB.seenEnd === undefined) JOB.seenEnd = null;
+  JOB.flash = null;
+  const done = new Promise(ok => { JOB.waiters.push({ id: d.job.id, ok }); });
+  await jobPoll();
+  rerenderSetup();  // its buttons wait while a job runs
+  return done;
+}
+const jobRunning = () => !!JOB.job?.running;
+async function jobEnded(j) {
+  S.tracks = {}; SETUP = null; LOGS = null;
+  if (!j.dry_run) JOB.flash = j;
+  try { await loadLibs(); } catch (e) {}
+  await refreshSetupNote();
+  rerenderSetup();
+}
+// Draw the Setup page again in place (no "Loading…", so it doesn't jump).
+function rerenderSetup() { if (S.page === "setup") pageSetup($("#main")).catch(e => { $("#main").innerHTML = errBox(e); }); }
+function progressBar(j, width) {
+  const p = j.progress;
+  return p && p.total ? `<div class="progress" style="${width ? `width:${width}` : ""}"><div style="width:${Math.round(p.done / p.total * 100)}%"></div></div>`
+    : `<div class="progress indet" style="${width ? `width:${width}` : ""}"><div></div></div>`;
+}
+const progressText = j => j.progress && j.progress.total ? `${j.progress.done} of ${j.progress.total} · about ${esc(j.progress.eta)} left` : `${mmss(j.elapsed)} so far`;
+function jobBar() {
+  const bar = $("#jobbar"), j = JOB.job;
+  if (SNAP || !j) { bar.hidden = true; return; }
+  if (j.running) {
+    bar.className = "jobbar"; bar.hidden = false;
+    bar.innerHTML = `<b>${esc(j.label)}${j.dry_run ? " (preview)" : ""}</b>${progressBar(j)}<span class="muted">${progressText(j)}</span>
+      ${S.page !== "setup" ? `<a href="#setup">Show</a>` : ""}<button id="jb-stop" ${j.stopping ? "disabled" : ""}>${j.stopping ? "Stopping…" : "Stop"}</button>`;
+    $("#jb-stop").onclick = () => postJSON("/api/jobs/stop", {}).then(jobPoll);
+  } else if (JOB.flash && JOB.flash.id === j.id) {
+    bar.className = `jobbar ${j.error ? "bad" : "good"}`; bar.hidden = false;
+    bar.innerHTML = `<span>${j.error === "Stopped." ? `<b>${esc(j.label)}</b> stopped. It carries on where it stopped next time.` : j.error ? `<b>${esc(j.label)}</b> stopped: ${esc(j.error)}` : `<b>✓ ${esc(j.label)}</b> finished`}</span>
+      ${S.page !== "setup" ? `<a href="#setup">Details</a>` : ""}<button id="jb-x">OK</button>`;
+    $("#jb-x").onclick = () => { JOB.flash = null; jobBar(); };
+  } else bar.hidden = true;
+}
+
+// What a writer reported, readably: the counts, notes, a few examples, and everything else folded away.
+const HIDE = new Set(["dry_run", "changed", "collection", "examples", "changes", "smartlists", "backup", "undo", "fields", "note", "warning",
+  "now_loaded", "clock", "smartlist_folder", "kept", "restored_from"]);
+const LABELS = { would_write: "files that would get a new tag", written: "files tagged", would_restore: "files that would get their old tags back",
+  restored: "files given their old tags back", skipped_changed_since_scan: "skipped: changed on disk since the scan (scan again first)",
+  unchanged: "already right", missing: "files no longer there", traktor_tracks: "tracks in Traktor", matched_scanned_tracks: "of them scanned" };
+const human = k => LABELS[k] || k.replace(/_/g, " ");
+function exampleText(x) {
+  return typeof x === "string" ? x : Object.entries(x).map(([k, v]) => k === "file" ? v : `${k}: ${v}`).join(" · ");
+}
+function resultSummary(r, depth = 0) {
+  if (!r || typeof r !== "object") return r ? `<div>${esc(r)}</div>` : "";
+  const nums = Object.entries(r).filter(([k, v]) => typeof v === "number" && v && !HIDE.has(k));
+  const nested = Object.entries(r).filter(([k, v]) => v && typeof v === "object" && !Array.isArray(v) && !HIDE.has(k));
+  const ex = r.examples || r.changes || [];
+  return `${nums.length ? `<ul style="max-height:none">${nums.map(([k, v]) => `<li>${esc(human(k))}: <b>${v}</b></li>`).join("")}</ul>` : ""}
+    ${r.warning ? `<div class="warnbox">${esc(r.warning)}</div>` : ""}
+    ${[r.note, r.clock && `Clock: ${r.clock}`, r.now_loaded && `Now loaded: ${r.now_loaded}`, r.smartlist_folder && `Smartlist folder: ${r.smartlist_folder}`]
+      .filter(Boolean).map(t => `<div class="small">${esc(t)}</div>`).join("")}
+    ${Array.isArray(r.smartlists) && r.smartlists.length ? `<div class="small muted">${r.smartlists.length} Smartlists: ${esc(r.smartlists.join(", "))}</div>` : ""}
+    ${ex.length ? `<div class="small" style="margin-top:6px"><b>For example</b></div><ul>${ex.slice(0, 15).map(x => `<li>${esc(exampleText(x))}</li>`).join("")}</ul>` : ""}
+    ${depth ? "" : nested.map(([k, v]) => `<div class="small" style="margin-top:8px"><b>${esc(human(k))}</b></div>${resultSummary(v, 1)}`).join("")}
+    ${depth ? "" : `<details style="margin-top:8px"><summary class="small muted" style="cursor:pointer">Everything it reported</summary><div class="tree">${tree(r)}</div></details>`}`;
+}
+function nothingToDo(r) {  // as the CLI's say_if_nothing
+  if (!r) return false;
+  const parts = "changed" in r ? [r] : Object.values(r).filter(v => v && typeof v === "object" && !Array.isArray(v));
+  const flags = parts.filter(d => "changed" in d).map(d => d.changed);
+  const counts = ["written", "would_write", "restored", "would_restore", "top_genre_changed"].filter(k => k in r).map(k => r[k]);
+  return (flags.length && !flags.some(Boolean)) || (!flags.length && counts.length && !counts.some(Boolean));
+}
+const TOUCHES_TRAKTOR = new Set(["traktor", "traktor_undo", "hype_traktor", "hype_remove", "colors_apply", "colors_recolour", "tempo_load", "tempo_native"]);
+const NO_PREVIEW = new Set(["traktor_undo"]);
+const cmdNote = j => `<div class="note">Same as <span class="mono">${esc(j.command)}</span> in Terminal.</div>`;
+const OPEN_WARN = `<div class="warnbox"><b>Traktor is open.</b> Quit it first: it saves its collection when it quits and would undo these changes. Then press Check again.</div>`;
+
+// Preview → write → undo for one of the CLI's writers, in a dialog.
+async function writeDialog(action, options = {}, onDone) {
+  const st = await getSetup().catch(() => null), label = a => st?.actions?.[a] || a;
+  const dlg = document.createElement("dialog"); dlg.className = "write"; document.body.appendChild(dlg);
+  dlg.addEventListener("close", () => { dlg.remove(); JOB.listeners.delete(live); });
+  let title = label(action);
+  const show = (html, buttons = "") => {
+    dlg.innerHTML = `<h3>${esc(title)}</h3>${html}<div class="filters" style="margin-top:12px">${buttons}<button data-close>Close</button><span class="small muted" id="wd-msg"></span></div>`;
+    dlg.querySelector("[data-close]").onclick = () => dlg.close();
+  };
+  const live = () => { const el = dlg.querySelector("#wd-live"), j = JOB.job; if (el && j?.running) el.textContent = j.live || j.lines.at(-1) || ""; };
+  JOB.listeners.add(live);
+  const busy = text => show(`<div class="muted">${esc(text)}</div><div class="mono small dim" id="wd-live" style="margin-top:6px;white-space:pre-wrap"></div>`);
+  async function run(act, opts, dry) {
+    try { return await startJob(act, opts, dry); } catch (e) { return { error: e.message, command: "" }; }
+  }
+  async function preview(act, opts) {
+    title = label(act);
+    if (NO_PREVIEW.has(act)) {
+      show(`<div>Puts collection.nml back to how it was before the analyzer's last change${st?.traktor_backup ? ` (backup <span class="mono">${esc(st.traktor_backup)}</span>)` : ""}.
+        It refuses if Traktor saved the collection since then, so nothing of yours is lost. Traktor must be closed.</div>`,
+        `<button class="primary" data-go>Undo it</button>`);
+      dlg.querySelector("[data-go]").onclick = () => write(act, opts);
+      return;
+    }
+    busy("Checking what would change…");
+    const j = await run(act, opts, true);
+    if (j.error) return show(`<div class="err">${esc(j.error)}</div>${j.command ? cmdNote(j) : ""}`, `<button data-again>Check again</button>`), again(act, opts);
+    const open = j.traktor_running && TOUCHES_TRAKTOR.has(act), nothing = nothingToDo(j.result);
+    show(`${nothing ? `<div><b>Nothing would change:</b> everything is already up to date.</div>` : `<div class="small muted">Preview, nothing written yet:</div>`}
+      ${resultSummary(j.result)}${open && !nothing ? OPEN_WARN : ""}
+      ${nothing ? "" : `<div class="note">${TOUCHES_TRAKTOR.has(act) ? "A backup of Traktor's collection is made first, and you can undo it here afterwards." : "The files' original tags are saved first, so you can put them back."}</div>`}${cmdNote(j)}`,
+      nothing ? "" : open ? `<button class="primary" data-again>Check again</button>` : `<button class="primary" data-go>Write it</button>`);
+    again(act, opts);
+    dlg.querySelector("[data-go]")?.addEventListener("click", () => write(act, opts));
+  }
+  function again(act, opts) { dlg.querySelector("[data-again]")?.addEventListener("click", () => preview(act, opts)); }
+  async function write(act, opts) {
+    busy("Writing…");
+    const j = await run(act, opts, false);
+    if (j.error) return show(`<div class="err">${esc(j.error)}</div>${j.command ? cmdNote(j) : ""}`, `<button data-again>Try again</button>`), again(act, opts);
+    const r = j.result || {}, undo = j.undo;
+    show(`<div style="color:var(--good)"><b>✓ Done.</b></div>${resultSummary(r)}
+      ${r.backup ? `<div class="note">Backup: <span class="mono">${esc(r.backup)}</span>${undo === "traktor_undo" ? "<br>Undo works until Traktor saves its collection again (it does when it quits)." : ""}</div>` : ""}
+      ${r.restored_from ? `<div class="note">Restored from <span class="mono">${esc(r.restored_from)}</span>.</div>` : ""}${cmdNote(j)}`,
+      undo ? `<button data-undo>${esc(label(undo))}…</button>` : "");
+    dlg.querySelector("[data-undo]")?.addEventListener("click", () => preview(undo, opts));
+    onDone?.(j);
+  }
+  dlg.showModal();
+  preview(action, options);
+}
+
+// ---------- setup ----------
+let SETUP = null;
+async function getSetup(force) { if (!SETUP || force) SETUP = await api("setup"); return SETUP; }
+const setupReady = st => st.models.ready && st.scan.tracks > 0;
+async function refreshSetupNote() {
+  if (SNAP) return;
+  let st; try { st = await getSetup(); } catch (e) { return; }
+  const todo = !setupReady(st), n = $("#setupnote"), link = document.querySelector('#nav a[href="#setup"]');
+  link.innerHTML = `Setup${todo ? `<span class="dot" data-tip="Not set up yet"></span>` : ""}`;
+  n.hidden = !todo || S.page === "setup";
+  n.innerHTML = !st.models.ready ? `<b>New here?</b> Nothing is set up yet: the analysis models aren't downloaded and nothing is scanned. <a href="#setup">Set it up →</a>`
+    : `<b>Nothing scanned yet</b>, so the tabs are empty. <a href="#setup">Scan your music →</a>`;
+}
+const SF = { folder: "", bpm: "", noMaest: false, multi: true, colours: true, lexicon: false };
+function step(state, n, title, body, actions = "") {
+  return `<div class="step ${state}"><div class="ic">${state === "done" ? "✓" : n}</div><div><div class="st">${title}</div><div class="small muted">${body}</div></div><div class="act">${actions}</div></div>`;
+}
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+async function pageSetup(main) {
+  const st = await getSetup(true), b = jobRunning() ? "disabled" : "", tk = st.traktor, sc = st.scan;
+  const jb = (id, text, primary, disabled) => `<button id="${id}" class="${primary ? "primary" : ""}" ${disabled || b}>${text}</button>`;
+  const models = st.models.ready
+    ? step("done", 1, "Analysis models", `Downloaded${st.models.maest ? "" : ", without MAEST: genres come from the smaller EffNet model only"}. <span class="mono">${esc(st.models.folder)}</span>`,
+        st.models.maest ? "" : jb("su-maest", "Download MAEST too"))
+    : step("todo", 1, "Download the analysis models", "A few hundred MB, mostly MAEST (the better genre model). Only once.",
+        `<label class="inline small"><input type="checkbox" id="su-nomaest" ${SF.noMaest ? "checked" : ""}> skip MAEST (smaller, less accurate genres)</label>${jb("su-setup", "Download", true)}`);
+  const traktorStep = tk.collection
+    ? step("done", 2, "Traktor's collection", `Found <span class="mono">${esc(tk.collection)}</span>: ${plural(sc.traktor_tracks, "track")} on disk${tk.missing ? `, ${tk.missing} listed but missing (moved, or on a drive that isn't connected)` : ""}.
+        ${tk.coloured} coloured by you, ${tk.cued} with 3+ of your own cue points.`)
+    : step("blocked", 2, "Traktor's collection", `${esc(tk.why)} Without Traktor you can still scan folders below; the colour and cue steps learn from Traktor and need it.`);
+  const scanBody = !sc.tracks ? `Listens to every track once: BPM, key, genre, mood, loudness, instruments. On a test collection of about 470 tracks this took 33 minutes on an M1 Pro.
+      You can stop any time: it keeps what's done and carries on next time.`
+    : `${plural(sc.tracks, "file")} scanned${sc.errors ? `, ${sc.errors} with errors (see the Tracks tab)` : ""}.${tk.collection ? sc.traktor_not_scanned ? ` <b>${plural(sc.traktor_not_scanned, "Traktor track")} not scanned yet.</b>` : " Every Traktor track is scanned." : ""}
+      ${sc.changed_since_scan ? ` <b>${plural(sc.changed_since_scan, "file")} changed on disk since the scan</b> (another tagger, Traktor or a sync app): scan again so tags and Traktor get their current results (quick: the analysis is cached).` : ""}
+      Scan again after adding music: only new and changed files are analysed.`;
+  const scanState = !st.models.ready ? "blocked" : sc.tracks && !sc.traktor_not_scanned && !sc.changed_since_scan ? "done" : "todo";
+  const scanStep = step(scanState, 3, sc.tracks ? "Your music, scanned" : "Scan your music", scanBody + (st.models.ready ? "" : " <b>Download the models first.</b>"),
+    `${tk.collection ? jb("su-scan-tk", "Scan Traktor's collection", scanState === "todo", !st.models.ready && "disabled") : ""}
+     <input type="text" id="su-folder" placeholder="or a folder: ~/Music/Tracks" value="${esc(SF.folder)}">${jb("su-scan-dir", "Scan folder", !tk.collection && scanState === "todo", !st.models.ready && "disabled")}`);
+  const hypeStep = sc.hype ? step("done", 4, "Hype scores", `${plural(sc.hype, "track")} scored 1-10 within your collection. New scans keep them up to date.`)
+    : sc.tracks >= 20 ? step("todo", 4, "Score hype", "Ranks every track 1-10 by rave sound and energy within your collection. Takes seconds.", jb("su-hype", "Score hype", true))
+    : step("blocked", 4, "Hype scores", "Needs 20 scanned tracks.");
+  const cm = st.colours, colourOk = tk.collection && tk.coloured >= 30 && sc.tracks >= 30;
+  const colourStep = cm.model ? step("done", 5, "Your colour scale", `Learned ${esc(cm.model)}; ${plural(cm.predicted, "track")} have a predicted colour. Train again after recolouring tracks in Traktor. See the Colours tab.`, jb("su-colours", "Train again"))
+    : step(colourOk ? "todo" : "blocked", 5, "Learn your colours", colourOk
+        ? "Learns what your Traktor colours mean from the tracks you've coloured, and predicts a colour for the rest. The first time it also listens again for moods and instruments (long, but only once, and resumable). Only reads Traktor's collection."
+        : `Optional. Needs 30+ tracks you've coloured in Traktor that are also scanned${tk.collection ? ` (you have ${tk.coloured} coloured)` : ""}.`,
+      colourOk ? jb("su-colours", "Learn your colours", true) : "");
+  const cueOk = tk.collection && tk.cued >= 30;
+  const cueStep = st.cues.model ? step("done", 6, "Your cue points", `Learned ${esc(st.cues.model)}. Suggestions show in each track's panel (Tracks tab); approve them there and write them to Traktor. Listen to the other tracks to get suggestions for those too.`,
+        `${jb("su-cues-scan", "Listen to the other tracks")}${jb("su-cues", "Train again")}`)
+    : step(cueOk ? "todo" : "blocked", 6, "Learn your cue points", cueOk
+        ? "Learns where you put cue points and your mix loop from the tracks you've cued, then suggests them for any track. About 13 minutes the first time for 450 tracks. Only reads Traktor's collection."
+        : `Optional. Needs 30+ tracks with 3+ of your own cue points in Traktor${tk.collection ? ` (you have ${tk.cued})` : ""}.`,
+      cueOk ? jb("su-cues", "Learn your cue points", true) : "");
+  const tool = (n, name, what) => st.tools[name] ? step("done", n, name, `Installed. ${what}`)
+    : step("todo", n, name, `${what} ${st.brew ? "" : `Install <a href="https://brew.sh" target="_blank" rel="noopener">Homebrew</a> first, then come back here.`}`,
+      st.brew ? jb(`su-install-${name}`, "Install with Homebrew") : "");
+  const T = st.tempo, bpm = SF.bpm || (T.views[0] ?? 145), haveView = T.views.includes(+bpm);
+  const tempoStep = step(!st.tools.rubberband || !sc.tracks ? "blocked" : haveView ? "done" : "todo", 9, "Tempo view",
+    `Optional: your catalogue as heard stretched to the tempo you play at, with key lock: which genres, colours and hype change.
+     About an hour the first time for 470 tracks, resumable; later only new tracks. ${T.views.length ? `Scanned: ${T.views.map(v => `${v} BPM`).join(", ")}.` : ""}
+     ${!st.tools.rubberband ? "<b>Needs rubberband (above).</b>" : ""} ${T.loaded ? `<b>Traktor has the ${T.loaded} BPM view loaded.</b>` : ""}`,
+    `<label class="inline small">BPM <input type="number" id="su-bpm" value="${esc(bpm)}" min="60" max="250"></label>
+     ${jb("su-tempo", haveView ? "Scan new tracks" : "Scan tempo view", !haveView && st.tools.rubberband && sc.tracks, (!st.tools.rubberband || !sc.tracks) && "disabled")}
+     ${T.loaded ? `<button id="su-native">Switch Traktor back…</button>` : T.views.length ? `<button id="su-load">Load into Traktor…</button>` : ""}
+     ${T.views.length ? `<label class="inline small"><input type="checkbox" id="su-lexicon" ${SF.lexicon || T.lexicon_loaded ? "checked" : ""}> Lexicon too</label>` : ""}`);
+  const w = (id, title, body, extra = "", disabled) => `<div class="step"><div class="ic">→</div><div><div class="st">${title}</div><div class="small muted">${body}</div></div>
+    <div class="act">${extra}<button id="${id}" ${disabled || ""}>Preview…</button></div></div>`;
+  const noScan = !sc.tracks && "disabled";
+  main.innerHTML = `<div class="page-head"><div><h2>Setup</h2><div class="muted">From a fresh install to everything in Traktor. Each button runs the same command as in Terminal (shown as it runs), in the background: you can use the other tabs meanwhile.</div></div></div>
+    <div id="jobpanel"></div>
+    <div class="card"><h3>Get started</h3><div class="steps">${models}${traktorStep}${scanStep}${hypeStep}</div></div>
+    <div class="card"><h3>Learn from your own Traktor work <span class="dim small">(optional)</span></h3><div class="steps">${colourStep}${cueStep}</div></div>
+    <div class="card"><h3>Extra tools <span class="dim small">(optional)</span></h3><div class="steps">
+      ${tool(7, "ffmpeg", "Plays loops and saves samples in a track's panel, keeps MP3 timing exact, and cuts mix clips.")}
+      ${tool(8, "rubberband", "Time-stretches tracks for the tempo view.")}${tempoStep}</div></div>
+    <div class="card"><h3>Into your files and Traktor</h3>
+      <div class="note" style="margin:0 0 6px">Every change shows a preview first and nothing is written until you press Write. Traktor's collection is backed up before each write, and you can undo it.</div>
+      ${st.traktor_running ? `<div class="err" style="margin:8px 0">Traktor is open. Previews work, but quit Traktor before writing to it: it saves its collection when it quits and would undo the changes.</div>` : ""}
+      <div class="steps">
+      ${w("wr-tag", "Genre tags in your files", `Writes each track's genre into the file's genre tag, which Traktor, Lexicon and other players read. Do this before the next step: Traktor gets its genres from these tags.
+        ${st.tags.tagged_files ? `${plural(st.tags.tagged_files, "file")} changed so far; their original tags are saved.` : ""}`,
+        `<label class="inline small"><input type="checkbox" id="wr-multi" ${SF.multi ? "checked" : ""}> close runner-up genres too ("Acid Trance; Hard Trance")</label>
+         ${st.tags.tagged_files ? `<button id="wr-untag">Put original tags back…</button>` : ""}`, noScan)}
+      ${w("wr-traktor", "Genres, colours and Smartlists in Traktor", `Puts the genre tags into Traktor's collection, sets the predicted colour on tracks you haven't coloured (yours are never changed),
+        and adds a "Genres (Track Analyzer)" Smartlist folder.`,
+        `<label class="inline small"><input type="checkbox" id="wr-colours" ${SF.colours ? "checked" : ""}> colours too</label>`, (noScan || !tk.collection) && "disabled")}
+      ${w("wr-hype", "Hype in Traktor's Comment 2", `Adds "Hype 07" after anything already in Comment 2 (never your own Comment), so you can sort and search by it in Traktor.`,
+        `<button id="wr-hype-rm">Take it out…</button>`, (!sc.hype || !tk.collection) && "disabled")}
+      ${cm.model ? w("wr-capply", "Colour new tracks", "Scans tracks that are new in Traktor and gives the uncoloured ones their predicted colour. Colours you set are never changed.", "", !tk.collection && "disabled") : ""}
+      ${cm.model ? w("wr-recolour", "Recolour clear disagreements", "Recolours the few tracks whose colour clearly disagrees with how they sound (gap 2.5+ colours, confidence 75%+; the Colours tab lists them). Tracks you keep always are skipped.", "", !tk.collection && "disabled") : ""}
+      ${st.traktor_backup ? `<div class="step"><div class="ic">↶</div><div><div class="st">Undo the last change to Traktor</div><div class="small muted">Last backup: <span class="mono">${esc(st.traktor_backup)}</span></div></div><div class="act"><button id="wr-undo">Undo…</button></div></div>` : ""}
+      </div></div>
+    <div class="note">Data folder: <span class="mono">${esc(st.home)}</span></div>`;
+  const on = (id, fn) => { const el = $("#" + id); if (el) el.onclick = fn; };
+  const go = (action, opts) => startJob(action, opts).catch(e => { $("#jobpanel").innerHTML = `<div class="err" style="margin-bottom:16px">${esc(e.message)}</div>`; });
+  const bindVal = (id, key, prop = "value") => { const el = $("#" + id); if (el) el.addEventListener("input", () => { SF[key] = el[prop]; }); };
+  bindVal("su-folder", "folder"); bindVal("su-bpm", "bpm"); bindVal("su-nomaest", "noMaest", "checked"); bindVal("wr-multi", "multi", "checked");
+  bindVal("wr-colours", "colours", "checked"); bindVal("su-lexicon", "lexicon", "checked");
+  on("su-setup", () => go("setup", { no_maest: SF.noMaest }));
+  on("su-maest", () => go("setup", {}));
+  on("su-scan-tk", () => go("scan", { traktor: true }));
+  on("su-scan-dir", () => SF.folder.trim() ? go("scan", { folders: [SF.folder.trim()] }) : $("#su-folder").focus());
+  on("su-hype", () => go("hype"));
+  on("su-colours", () => go("colors_train"));
+  on("su-cues", () => go("cues_train"));
+  on("su-cues-scan", () => go("cues_scan"));
+  on("su-install-ffmpeg", () => go("install", { tool: "ffmpeg" }));
+  on("su-install-rubberband", () => go("install", { tool: "rubberband" }));
+  on("su-tempo", () => go("tempo_scan", { bpm: +($("#su-bpm").value || 145) }));
+  const lex = () => !!$("#su-lexicon")?.checked;
+  on("su-load", () => writeDialog("tempo_load", { bpm: +($("#su-bpm").value || 145), lexicon: lex() }));
+  on("su-native", () => writeDialog("tempo_native", { lexicon: lex() }));
+  on("wr-tag", () => writeDialog("tag", { multi: SF.multi }));
+  on("wr-untag", () => writeDialog("untag"));
+  on("wr-traktor", () => writeDialog("traktor", { colours: SF.colours }));
+  on("wr-hype", () => writeDialog("hype_traktor"));
+  on("wr-hype-rm", () => writeDialog("hype_remove"));
+  on("wr-capply", () => writeDialog("colors_apply"));
+  on("wr-recolour", () => writeDialog("colors_recolour"));
+  on("wr-undo", () => writeDialog("traktor_undo"));
+  jobPanel();
+}
+// The running (or last) job on the Setup page: progress, live log, result.
+function jobPanel() {
+  const box = $("#jobpanel"), j = JOB.job;
+  if (!box || S.page !== "setup") return;
+  if (!j || (j.dry_run && !j.running) || JOB.hidden === j.id) { box.innerHTML = ""; return; }
+  const pre = box.querySelector("pre.log"), atEnd = !pre || pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 30, top = pre?.scrollTop;
+  const status = j.running ? `${progressBar(j, "100%")}<div class="small muted" style="margin-top:6px">${progressText(j)}${j.live ? ` · <span class="mono">${esc(j.live)}</span>` : ""}</div>`
+    : j.error === "Stopped." ? `<div class="muted"><b>Stopped</b> after ${mmss(j.elapsed)}. It carries on where it stopped next time.</div>`
+    : j.error ? `<div class="err">${esc(j.error)}</div>`
+    : `<div style="color:var(--good)"><b>✓ Finished</b> in ${mmss(j.elapsed)}.${j.result?.this_run ? ` Analysed ${plural(j.result.this_run.analyzed, "track")}${j.result.this_run.errors ? `, ${j.result.this_run.errors} errors` : ""}.` : ""}</div>
+      ${j.result ? `<details style="margin-top:6px"><summary class="small muted" style="cursor:pointer">Everything it reported</summary><div class="tree">${tree(j.result)}</div></details>` : ""}`;
+  box.innerHTML = `<div class="card" style="margin-bottom:16px"><div class="filters" style="margin-bottom:8px"><h3 style="margin:0">${esc(j.label)}${j.dry_run ? " (preview)" : ""}</h3><div class="spacer"></div>
+      ${j.running ? `<button id="jp-stop" ${j.stopping ? "disabled" : ""}>${j.stopping ? "Stopping…" : "Stop"}</button>` : `<button id="jp-x">Hide</button>`}</div>
+    <div class="mono small dim" style="margin-bottom:8px">${esc(j.command)}</div>${status}
+    ${j.running ? `<div class="note">Stopping is safe: it keeps what's done and carries on next time. Closing this page doesn't stop it; stopping the web server does.</div>` : ""}
+    <pre class="log">${esc(JOB.lines.slice(-400).join("\n")) || "…"}</pre></div>`;
+  const p2 = box.querySelector("pre.log");
+  p2.scrollTop = atEnd ? p2.scrollHeight : top;
+  $("#jp-stop")?.addEventListener("click", () => postJSON("/api/jobs/stop", {}).then(jobPoll));
+  $("#jp-x")?.addEventListener("click", () => { JOB.hidden = j.id; JOB.flash = null; jobPanel(); jobBar(); });
+}
+JOB.listeners.add(jobPanel);
 
 // ---------- mixes ----------
 let LOGS = null;
@@ -1446,7 +1794,15 @@ function tree(v, key, depth = 0) {
   return `<div class="kv">${k}<span class="${cls}">${esc(typeof v === "string" ? JSON.stringify(v) : v)}</span></div>`;
 }
 
-loadLibs().then(route).catch(e => { $("#main").innerHTML = errBox(e); });
+async function init() {
+  await loadLibs();
+  if (!SNAP) {
+    jobPoll();
+    try { if (!location.hash && !setupReady(await getSetup())) location.hash = "setup"; } catch (e) {}  // a new user starts at Setup
+  }
+  route();
+}
+init().catch(e => { $("#main").innerHTML = errBox(e); });
 </script>
 </body>
 </html>

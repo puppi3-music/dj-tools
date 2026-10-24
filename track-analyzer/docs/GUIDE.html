@@ -136,6 +136,7 @@ td code { white-space: nowrap; }
 
 <!-- ───────────────────────────── -->
 <h2 id="start">Before you start</h2>
+<div class="note"><p><b>Prefer buttons to Terminal?</b> Double-click <code>Start Track Analyzer.command</code> in the project folder (the first time: right-click → Open). It installs what's missing and opens the web page. Its <b>Setup</b> tab does most of this guide with buttons: scanning, learning your colours and cues, and writing genres, colours, hype and the tempo view into Traktor. Each one shows a preview first and offers Undo afterwards. The page shows the command each button runs, so the steps below match it one to one.</p></div>
 <ul>
   <li><b>Run every command from the project folder</b> in Terminal (or VS Code's terminal):
     <div class="cmd"><pre>cd ~/dj-track-analyzer</pre></div> (or wherever you put it)</li>
@@ -356,7 +357,7 @@ td code { white-space: nowrap; }
 <tr><td><code>styles</code></td><td>Lists the 400 Discogs style names and checks dj_genres.json</td><td>Nothing</td></tr>
 <tr><td><code>train &lt;folder&gt;</code></td><td>Optional: teach your own genre names from example folders</td><td>App files only</td></tr>
 <tr><td><code>serve</code></td><td>Runs the MCP server for LM Studio (<code>--http</code> for Open WebUI)</td><td>Nothing</td></tr>
-<tr><td><code>web</code></td><td>Opens everything in a web page on this Mac: collection, hype, colours, tempo view, saved mix analyses. Hold genres and colours there</td><td>The hold list only</td></tr>
+<tr><td><code>web</code></td><td>Opens everything in a web page on this Mac: collection, hype, colours, tempo view, saved mix analyses. Hold genres and colours, approve cues, save loops, and on the Setup tab run the other commands with buttons (writers preview first)</td><td>Only what you press: holds, cue approvals and samples; the Setup tab's writers change what their command changes</td></tr>
 <tr><td><code>cues train</code> / <code>cues scan</code> / <code>cues show</code></td><td>Learns where you put cues and loops; listens to your tracks bar by bar; suggestions for one track</td><td>App database and model file</td></tr>
 <tr><td><code>cues apply</code></td><td>Writes the cues and corrections you approved in the web page into free hot-cue slots</td><td class="changes">Traktor<br><small>undo: <code>traktor --undo</code></small></td></tr>
 <tr><td><code>hold</code></td><td>Lists the tracks whose genre or colour the writers leave alone; <code>--genre</code> / <code>--colour "name"</code> adds, with <code>--release</code> removes</td><td>The hold list only</td></tr>

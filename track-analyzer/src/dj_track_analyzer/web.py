@@ -1,8 +1,9 @@
 """`web` command: a local web page over the scanned collection, the colour model, the tempo views and saved
-mix analyses. It calls the same functions as the CLI and only reads (hype.find(rescore=False) and
-colors.explain(extract=False) keep those two from starting work). The one thing it changes is the hold list
-(collection.held): which tracks' genre / colour the writers leave alone. `--export` / the Export button
-save a snapshot: one self-contained, read-only HTML file with the data inside."""
+mix analyses. Its tabs call the same functions as the CLI and only read (hype.find(rescore=False) and
+colors.explain(extract=False) keep those two from starting work). Changes made right here: the hold list
+(collection.held), cue approvals, cue writes and saved loop samples. The Setup tab runs the CLI's own commands in
+the background (jobs.py): setup, scans, training and, after a dry-run preview, the writers. `--export` / the Export
+button save a snapshot: one self-contained, read-only HTML file with the data inside."""
 
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import analysis, collection, traktor
+from . import analysis, collection, jobs, traktor
 from .analysis import COLOR_NAMES, HOME, log
 
 PAGE = Path(__file__).with_name("web") / "index.html"
@@ -269,6 +270,8 @@ def write_cues(dry_run: bool) -> dict:
     """`cues apply` from the page: a preview first (dry_run), then the write. Refuses while Traktor is open."""
     from . import cues, traktor
 
+    if jobs.busy():
+        raise ValueError(f"Busy with: {jobs.state()['job']['label']}. Wait for it to finish first.")
     with library("native"):
         before = cues.plans()
         if not before:
@@ -290,6 +293,8 @@ def undo_write() -> dict:
     """Put back the collection from before the last write (`traktor --undo`) and the approvals it used."""
     from . import cues, traktor
 
+    if jobs.busy():
+        raise ValueError(f"Busy with: {jobs.state()['job']['label']}. Wait for it to finish first.")
     try:
         out = traktor.undo()
     except SystemExit as e:
@@ -658,6 +663,25 @@ def approve_cues(path: str, plan: dict | None) -> dict:
     return out
 
 
+def setup_status() -> dict:
+    with library("native"):
+        return jobs.setup_status()
+
+
+def start_job(b: dict) -> dict:
+    with library("native"):  # the options are checked against the normal library
+        return jobs.start(str(b["action"]), b.get("options") or {}, bool(b.get("dry_run", False)))
+
+
+def _after_job(job: dict) -> None:
+    """A job may have changed collection.nml, the scans or the models: read them again next time."""
+    _grids["mtime"] = None
+    _wave_src.clear()
+
+
+jobs.on_finish.append(_after_job)
+
+
 def _json_in(path: Path):
     """The JSON object in a saved run output (also when stderr was teed into the same file)."""
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -867,6 +891,10 @@ def build_app(log_dirs: list[Path]):
         Route("/api/cues/rescan", post(lambda b: rescan_track(str(b["path"]))), methods=["POST"]),
         Route("/api/cues/write", post(lambda b: write_cues(bool(b.get("dry_run", True)))), methods=["POST"]),
         Route("/api/cues/undo", post(lambda b: undo_write()), methods=["POST"]),
+        Route("/api/setup", respond(lambda q: setup_status())),
+        Route("/api/jobs", respond(lambda q: jobs.state(int(num(q, "since", 0))))),
+        Route("/api/jobs/start", post(start_job), methods=["POST"]),
+        Route("/api/jobs/stop", post(lambda b: jobs.stop()), methods=["POST"]),
         Route("/api/samples/folders", respond(lambda q: sample_folders())),
         Route("/api/samples/save", save_loop_endpoint, methods=["POST"]),
         Route("/api/samples/reveal", post(lambda b: reveal_sample(b.get("file"), b.get("folder"))), methods=["POST"]),
@@ -906,4 +934,5 @@ def serve(host: str = "127.0.0.1", port: int = 8766, logs: list[str] | None = No
         server.run()
     except KeyboardInterrupt:
         pass
+    jobs.stop_on_exit()  # a scan the page started stops as Ctrl-C would stop it (it continues next time)
     log("Stopped.")

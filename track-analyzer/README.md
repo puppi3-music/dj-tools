@@ -41,6 +41,17 @@ Every command runs from the project folder and starts with `uv run dj-track-anal
 
 ## 1. Install (one time)
 
+### The easy way: no Terminal
+
+1. Download or clone this project and open its folder in Finder.
+2. Double-click **`Start Track Analyzer.command`**. The first time, macOS may say it's from an unidentified developer: right-click it, choose **Open**, then **Open** again.
+3. A Terminal window opens and does the install for you: it installs **uv** (the Python manager, from astral.sh) if it's missing, then Python and the analyzer (about 400 MB, a few minutes the first time). Then the web page opens in your browser.
+4. The page starts on its **Setup** tab: a checklist that downloads the models, scans your Traktor collection or a music folder, learns your colours and cue points, installs ffmpeg and rubberband (with Homebrew, if you have it) and puts the results into your files and Traktor. Each button runs the same command as below, in the background, with a progress bar and a live log; **Stop** is safe (scans carry on where they stopped next time).
+
+Keep the Terminal window open while you use the page; close it to stop. Double-click again any time: if the page is already running, it just opens it.
+
+### The Terminal way
+
 Open **Terminal**:
 
 ```bash
@@ -166,7 +177,7 @@ uv run dj-track-analyzer scan --traktor ~/Music/Incoming   # both
 uv run dj-track-analyzer web
 ```
 
-Opens `http://127.0.0.1:8766/` in your browser. Seven tabs:
+Opens `http://127.0.0.1:8766/` in your browser (double-clicking `Start Track Analyzer.command` does the same). Eight tabs:
 
 - **Overview**: the `stats` numbers as charts.
 - **Tracks**: a searchable, sortable list. Click a track for its genres, styles, moods, instruments and place on your colour scale, plus what mixes well with it.
@@ -175,8 +186,25 @@ Opens `http://127.0.0.1:8766/` in your browser. Seven tabs:
 - **Tempo view**: the `tempo report` results.
 - **Mixes**: saved `analyze` results of recorded mixes, with the timeline, tracklist check, clip suggestions and chapters.
 - **Files**: any other saved JSON.
+- **Setup**: what's done and what's next, with a button for each step (below).
 
-The library menu switches between your normal library and a tempo view. The page never changes Traktor, Lexicon or your files. Hype comes from the last scan, and `colors explain` leaves out tracks that haven't had the deep listening pass yet. The page runs only on this Mac. Stop it with Ctrl-C.
+The library menu switches between your normal library and a tempo view. Browsing changes nothing; the page only writes when you press a button that says so (holds, cue approvals, saved samples, and the writers on the Setup tab), and anything that changes your files or Traktor shows a preview first. Hype comes from the last scan, and `colors explain` leaves out tracks that haven't had the deep listening pass yet. The page runs only on this Mac. Stop it with Ctrl-C.
+
+**Setup tab: everything without the Terminal.** A checklist from a fresh install to everything in Traktor: download the models, scan (your Traktor collection, a folder, or both), score hype, learn your colours and cue points, install ffmpeg and rubberband with Homebrew, scan a tempo view. It shows what's done (models, how many Traktor tracks aren't scanned yet, files changed on disk since the scan, trained models with their dates) and what each step needs (for example 30 coloured tracks for the colour model). A button starts the step's command in the background, one at a time: a progress bar and the live log show on the page and in a bar at the top of every tab, and **Stop** works like Ctrl-C (scans keep what's done). The command is shown, so you can run the same thing in the Terminal later. Stopping the web page stops a running step too.
+
+The writers are there too, each with **Preview…** first (the command's `--dry-run`: counts and examples of what would change), then **Write it**, then **Undo**:
+
+| Button | Same as | Undo |
+|---|---|---|
+| Genre tags in your files | `tag` (`--multi` when "close runner-up genres" is ticked) | `untag` |
+| Genres, colours and Smartlists in Traktor | `traktor` (`--no-colors` when "colours too" is off) | `traktor --undo` |
+| Hype in Traktor's Comment 2 | `hype --traktor` | `traktor --undo`, or **Take it out…** (`hype --traktor --remove`) |
+| Colour new tracks | `colors apply` | `traktor --undo` |
+| Recolour clear disagreements | `colors review --apply --yes` (also on the Colours tab) | `traktor --undo` |
+| Load into Traktor (tempo view) | `tempo load` (`--lexicon` when ticked; also on the Tempo view tab) | `tempo native` |
+| Undo the last change to Traktor | `traktor --undo` (refuses if Traktor saved since; no `--force` from the page) | |
+
+The Traktor writers refuse while Traktor is open, exactly as in the Terminal; the preview says so and offers **Check again**. The Hype tab has the Comment 2 button as well.
 
 **Hold a track's genre or colour.** In **Tracks**, tick tracks (the header box ticks every track shown) and choose **Hold genre** or **Hold colour**, or use the switches in a track's panel. A held genre or colour stays as it is in your files, Traktor and Lexicon: `tag`, `scan --write-tags`, `traktor` (also with `--overwrite-colors`), `colors review --apply` and `tempo load` skip it and count it as `genre_held` / `colour_held`. Holding writes nothing at the time; it only changes the analyzer's own list. Release a track the same way. The colour hold is the same list as `colors review`'s "keep always". From the Terminal:
 
