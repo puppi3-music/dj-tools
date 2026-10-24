@@ -539,7 +539,7 @@ In LM Studio open the **Program** tab in the right sidebar, choose **Install →
   "mcpServers": {
     "track-analyzer": {
       "command": "/Users/YOUR_NAME/.local/bin/uv",
-      "args": ["run", "--directory", "/Users/YOUR_NAME/dj-tools/track-analyzer", "dj-track-analyzer"]
+      "args": ["run", "--directory", "/Users/YOUR_NAME/puppi3s-dj-tools/track-analyzer", "dj-track-analyzer"]
     }
   }
 }
