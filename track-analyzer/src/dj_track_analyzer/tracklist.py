@@ -602,7 +602,8 @@ def summary(result: dict) -> str:
         for i, h in enumerate(result["highlights"], 1):
             span = h.get("video") or f"{h['start']}-{h['end']}"
             rise = f", rises {h['rise_lu']:+.1f} LU" if h["rise_lu"] > 1 else ""
-            lines.append(f"    Clip {i}: {span}  {h['lufs']} LUFS{rise}" + (f"  ({h['track']})" if h.get("track") else ""))
+            best = f"  #{h['rank']} best" if len(result["highlights"]) > 1 and h.get("rank") else ""
+            lines.append(f"    Clip {i}: {span}{best}  {h['lufs']} LUFS{rise}" + (f"  ({h['track']})" if h.get("track") else ""))
     if tl:
         lines += ["", "  Timeline (genre)"]
         lines += [f"    {r}" for r in _runs(tl, "dj_genre")]
@@ -700,7 +701,8 @@ def highlights(short: np.ndarray, duration: float, n: int = 2, length: float = 4
     for score, s, level, rise in cands:
         if all(abs(s - p["_s"]) >= 2 * win for p in picked):
             picked.append({"_s": s, "start": fmt_time(s), "end": fmt_time(min(duration, s + win)),
-                           "lufs": round(float(level), 1), "rise_lu": round(float(rise), 1)})
+                           "lufs": round(float(level), 1), "rise_lu": round(float(rise), 1),
+                           "rank": len(picked) + 1})  # 1 = best score; the list itself is in time order
         if len(picked) == n:
             break
     return [{k: v for k, v in p.items() if k != "_s"} for p in sorted(picked, key=lambda p: p["_s"])]

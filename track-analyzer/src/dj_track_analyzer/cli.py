@@ -73,6 +73,19 @@ def main() -> None:
     a.add_argument("--json-only", action="store_true", help="for a mix: leave out the readable summary after the JSON")
     a.add_argument("--start", default=None, metavar="HH:MM:SS",
                    help="with --tracklist: when the recording started (read from Traktor's recording name if left out)")
+    cl = sub.add_parser("clips", help="previews of a mix's clip suggestions from the finished video, then the chosen clips")
+    cl.add_argument("analysis", help="the JSON from analyze --highlights N --offset M:SS")
+    cl.add_argument("--video", required=True, help="the finished video the offset was read off")
+    cl.add_argument("--pick", nargs="+", metavar="N", default=None,
+                    help="make these clips at full quality: suggestion numbers (1 4) or own ranges (7:35-8:15); "
+                         "without it: 720p previews of every suggestion")
+    cl.add_argument("--previews", default=None, metavar="DIR",
+                    help="folder for previews; they go in a subfolder named after the analysis (default: /tmp/clip-previews)")
+    cl.add_argument("--out", default=None, metavar="DIR", help="where --pick clips go (default: next to the video)")
+    cl.add_argument("--height", type=int, default=1440, help="--pick clips' height in pixels (default 1440)")
+    cl.add_argument("--bitrate", default="16M", help="--pick clips' video bitrate (default 16M)")
+    cl.add_argument("--force", action="store_true", help="replace --pick clips that are already there")
+    cl.add_argument("--dry-run", action="store_true", help="list what would be made, write nothing")
     sc = sub.add_parser("scan", help="analyze a whole collection (resumable), save to database + spreadsheet")
     sc.add_argument("folders", nargs="*", help="folders (or files) to scan")
     sc.add_argument("--traktor", action="store_true", help="scan every track in Traktor's collection (can be combined with folders)")
@@ -216,6 +229,10 @@ def main() -> None:
 
             sys.stdout.flush()
             log("\n" + summary(result))
+    elif args.cmd == "clips":
+        from . import clips
+
+        clips.main(args)
     elif args.cmd == "train":
         print(json.dumps(train(args.folder), indent=2, ensure_ascii=False))
     elif args.cmd == "scan":

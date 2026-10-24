@@ -25,6 +25,7 @@ Step-by-step recipes are in [GUIDE.html](GUIDE.html#tasks) (`open docs/GUIDE.htm
 | Ask a local LLM (LM Studio / Open WebUI) about the collection | `serve` (MCP) | ✅ |
 | Mix suggestions: compatible key + BPM | via the LLM tools | ✅ |
 | Timeline of a DJ mix (genre per 2 min) | `analyze` on a file over 12 min | ✅ |
+| Clip suggestions from a recorded mix, previews and full-quality clips cut from the finished video | `analyze --highlights`, `clips` | ✅ |
 | Undo changes to Traktor | `traktor --undo` | ✅ |
 | The catalogue as heard at one tempo with key lock (145 by default, `--bpm` for any): genres, colours, hype; own CSV + NML; swap Traktor to it and back | `tempo scan / report / load / native` | ✅ |
 | Redo a tempo view's genres, colours, hype after rule or colour changes (seconds) | `tempo refresh` | ✅ |

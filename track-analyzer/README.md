@@ -109,9 +109,18 @@ with their keys and genres, and the timeline's genres); `--json-only` leaves it 
 first track starts 0:14 in. Read that off the finished video itself: it depends on how you lined the audio
 up, so it can't come from the recording. The video's opening becomes an "Intro" chapter at 0:00, and very
 short plays fold into the next chapter (YouTube wants at least three, 10 s apart). `--highlights` suggests
-two 40-second stretches for short clips (loud, rising out of something quieter; loudness only, so pick by
-eye and snap to a bar), in video times with `--offset`. Trimming silence off the audio file doesn't change
+two 40-second stretches for short clips (`--highlights 5` for five; loud, rising out of something quieter;
+loudness only, so pick by eye and snap to a bar), in video times with `--offset`, each ranked (#1 best). Trimming silence off the audio file doesn't change
 the times: they're counted from the first track's start.
+
+**Clips from the video:** `clips <analysis>.json --video final.mp4` cuts quick 720p previews of every
+suggestion into `/tmp/clip-previews/<analysis name>/` so you can watch and choose. While cutting, it measures
+how much moves on screen in each and ranks them by the audio and the movement together (files start with that
+rank, e.g. `#1 clip-1 7m37s.mp4`): the audio can't see a stretch where the DJ stands still. On a test set the
+audio's second pick was one of the stillest stretches of the whole video and dropped to fourth. Then `--pick 1 4` (suggestion numbers, or your own ranges like `20:30-21:10`) makes those clips at
+full quality next to the video, named by suggestion number (`<video>-clip-1.mp4`, `-clip-4.mp4`; own ranges as `-clip-20m30s-21m10s.mp4`) (1440p30 H.264; hardware encoder on a Mac;
+`--height`, `--bitrate 16M`, `--out`). The JSON must come from `analyze` with `--highlights` and `--offset`.
+Needs ffmpeg (`brew install ffmpeg`). Existing clips are never overwritten without `--force`; `--dry-run` lists them.
 
 On a test mix of 22 house and melodic techno tracks, all sped up 12-20% with stems layered, 12 keys matched
 Traktor's and 1 was one step away. Without the tracklist the mix was called Psytrance (0.59); with it, Trance,
@@ -546,6 +555,10 @@ You get an accuracy estimate per genre and the pairs it confuses most (`Hard Tra
 | `tempo scan\|report\|export\|nml\|refresh\|status\|load\|native` | The tempo view, 145 by default (section 6) | `load`, `native`: **Traktor** (and Lexicon) |
 | `train <folder>` | Your own genres (section 9) | app files |
 | `serve [--http] [--host] [--port]` | MCP server; stdio for LM Studio, HTTP for Open WebUI | nothing |
+| `web [--port 8766] [--logs DIR] [--no-open] [--export FILE.html]` | Everything in a local web page, or a snapshot file to share (see [Browse it all in a web page](#browse-it-all-in-a-web-page)) | the hold list only |
+| `cues train\|scan\|show [track] [--workers N] [--rescan]` | Cue points and a mix loop per track, learned from the cues you set yourself (see [Browse it all in a web page](#browse-it-all-in-a-web-page)) | app database and model file |
+| `cues apply [--dry-run]` | Write the cues and corrections you approved in the web page | **Traktor** (undo: `traktor --undo`) |
+| `hold [--genre TEXT \| --colour TEXT] [--release]` | List, add or remove tracks whose genre / colour the writers leave alone | the hold list (app database) |
 
 ## Settings
 
@@ -578,6 +591,7 @@ dj-track-analyzer/
 │   ├── hype.py             hype score
 │   ├── tempo.py            tempo view
 │   ├── lexicon.py          Lexicon Local API
+│   ├── clips.py            clip previews and clips cut from a mix's video
 │   └── dj_genres.json      Discogs styles → DJ genre rules
 ├── logs/                   saved command output (`… 2>&1 | tee logs/scan.txt`), not in git
 ├── pyproject.toml, uv.lock

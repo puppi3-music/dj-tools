@@ -44,6 +44,14 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
 - `hype.py`: `hype` command (find by hype, filters, gems, `--traktor` → Comment 2).
 - `tempo.py`: `tempo` command, the catalogue as heard at one tempo (default 145, `--bpm` for any).
 - `lexicon.py`: `tempo load/native --lexicon` via Lexicon's Local API.
+- `clips.py`: `clips <analysis.json> --video <final.mp4>`: cuts `analyze --highlights --offset` suggestions (video
+  times from the JSON; highlights carry `rank`, 1 = best score) out of the finished video with ffmpeg: 720p previews
+  in /tmp/clip-previews/<json stem>/, or `--pick` (numbers or M:SS-M:SS ranges) at 1440p30 h264_videotoolbox 16M
+  next to the video as `<video>-clip-N.mp4` (N = suggestion number; own ranges `-clip-7m35s-8m15s`), no overwrite
+  without --force. All clips are checked against the video's length before any is cut. Re-encodes (exact cuts; `-ss` before `-i`). Previews also measure
+  movement in the same decode (64x36 grey at 2 fps, mean frame diff) → overall rank = mean(audio rank, movement
+  rank) among the clips; files named "#overall clip-N MmSSs.mp4" (a new preview run deletes the old ones), --pick still takes N. Test set: audio #2 was at
+  the 6th percentile of movement (checked: static), audio #4 at the 97th (lively).
 - `tracklist.py`: `analyze <mix> --tracklist`: Traktor history NML (COLLECTION entries joined to PLAYLIST
   ENTRY/PRIMARYKEY KEY = VOLUME+DIR+FILE; EXTENDEDDATA STARTDATE = y<<16|m<<8|d, STARTTIME = seconds of day,
   DURATION = deck run time, which includes faded-out tails, so plays overlap ~70% of a mix). Recording start from
