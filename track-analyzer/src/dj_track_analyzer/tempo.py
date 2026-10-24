@@ -545,8 +545,9 @@ def build_view(text: str, bpm: float, path: Path) -> tuple[str, dict, dict]:
         raise SystemExit(f"No {bpm:g} BPM analysis yet. Run: uv run dj-track-analyzer tempo scan --bpm {bpm:g}")
     remembered, genres_seen = {}, set()
     stats = {"collection": str(path), "bpm": bpm, "tracks_in_view": 0, "genres_set": 0, "colours_moved": 0,
-             "colours_same": 0, "hype_set": 0}
+             "colours_same": 0, "hype_set": 0, "genre_held": 0, "colour_held": 0}
     examples = []
+    genre_held, colour_held = collection.held("genre"), collection.held("colour")
 
     def fix_entry(m: re.Match) -> str:
         entry = m.group(0)
@@ -557,12 +558,17 @@ def build_view(text: str, bpm: float, path: Path) -> tuple[str, dict, dict]:
         stats["tracks_in_view"] += 1
         cur = _info(entry)
         want = {}
-        if r["genre"]:
+        if r["path"] in genre_held:  # your genre stays, and keeps its Smartlist in the view's folder
+            stats["genre_held"] += 1
+            genres_seen.update(g.strip() for g in (cur.get("GENRE") or "").split(";") if g.strip())
+        elif r["genre"]:
             want["GENRE"] = collection.multi_genre(dict(r))
             genres_seen.update(g.strip() for g in want["GENRE"].split(";"))
         yours = int(cur["COLOR"]) if (cur.get("COLOR") or "").isdigit() and 1 <= int(cur["COLOR"]) <= 7 else None
         at = shifted_colour(yours, r["color_position"], r["native_color_position"])
-        if at is not None:
+        if r["path"] in colour_held:
+            stats["colour_held"] += 1
+        elif at is not None:
             want["COLOR"] = str(at)
             stats["colours_moved" if at != yours else "colours_same"] += 1
         if r["hype"] is not None:

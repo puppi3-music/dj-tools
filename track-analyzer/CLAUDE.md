@@ -64,6 +64,57 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
   first track's start (`anchor()`; `first_sound_seconds` without a tracklist) + offset, offset read off the
   finished video by the user (required for --chapters; never guessed from the audio); highlights from 1 s means
   of EBU short-term loudness, level + 0.5·rise (capped 8 LU), windows touching < −45 LUFS skipped. Missing data → SystemExit saying how to get it.
+- `web.py` + `web/index.html`: `web` command, Starlette/uvicorn (already deps of mcp) on 127.0.0.1:8766, one
+  vanilla-JS page (no CDN). Reads through the CLI's own functions (`collection.summary/mix_suggestions`,
+  `hype.find(rescore=False)`, `colors.review/kept`, `colors.explain(extract=False)`, `tempo.report/status`).
+  `web.library()` swaps collection.DB + cache globals per request under a lock (tempo.view_db sets them) and
+  restores them. Mixes/Files tabs read run output JSON from `logs/` (`--logs`; endpoints are /api/saved*, since
+  tracker blockers block `/api/log?`); `_json_in` tolerates teed stderr. Its only write: POST /api/hold (JSON
+  body + Origin check against CSRF). `--export` / /export = snapshot: page + `window.SNAPSHOT` (every tab's data,
+  hype in 3 orders filtered client-side as hype.find does, default-rule mix suggestions per track, mix JSONs only).
+- `cues.py`: `cues train|scan|show`. Traktor's grid (AutoGrid CUE_V2 TYPE 4 START ms + TEMPO BPM; `grids()`,
+  read-only; your cues = TYPE 0 cue / 5 loop, LEN ms) → bars. Per bar (cache.db `bars`, keyed path+grid, valid
+  while mutagen length is within 0.25 s): 6 band dB, 40 mel dB (2048 FFT, 10 ms hop, 44.1k mono), kick pulse
+  (30-100 Hz on-beat vs mid-beat) and off-beat hat pulse. `features()`: bar level, after−before over 1-16 bars,
+  Foote novelty (2-16) on mel cosine SSM, loopability (similarity / level spread of the next 2-8 bars), phrase
+  position (mod 2..32 from the grid marker's bar). Two HistGradientBoosting models (cue bar, loop start bar),
+  GroupKFold(5) by track; picks: threshold 0.25, ≤7, ≥4 bars apart; loop = argmax, length = your most common.
+  Bundle `data/my_cues.joblib`. Section names from kick on (`kick_on`) over the next 8 bars vs the 16 before (a 2-bar fill isn't a breakdown) + level 4 bars either side (`_name`, untested
+  against truth: test cues are named "Cue N"). `_one_path_each`: a startup-disk track is listed as
+  /Users/… and /Volumes/<disk>/Users/…, both exist. cache.db `wave` (path + WAVE_VERSION, same length check): 1500 slices x [peak, rms, low, mid, high] uint8, made in the same decode as the bars (`_wave`); the panel draws it on a canvas (base64 in /api/cues). Web: /api/cues + waveform in the track panel. Approval (cue by cue, named,
+  loop in slot 8, empty slots + corrections of their own slips): collection.db `cue_plan` {path, grid key, add[],
+  move[]} via POST /api/cues/approve; `cues apply [--dry-run]` (Traktor closed, refuses with a tempo view loaded,
+  `traktor._save` backup → `traktor --undo`): adds into free HOTCUE slots (cues 0-6 in time order, loop prefers 7),
+  skipped within a bar of an existing cue or another added one (`resolve()`, shared by `apply` and the
+  page's `preview()`, so what the page shows as approved is what gets written; hot-cue slots counted over all
+  CUE_V2 incl. fade/load, `grids()["all_cues"]`); moves set START of the CUE_V2 with that HOTCUE
+  only if START still matches; grid key mismatch → skipped; ENTRY MODIFIED stamped with the file's mtime; applied
+  plans deleted. Ignored corrections: collection.db `cue_ignore` (path, hotcue, from_ms, to_ms), flagged in suggest(); the counts and
+  the page only count `pending_corrections()` (not ignored, not approved); `web.recount()` updates one track after
+  approve/ignore/rescan; rescan = `cues.forget_track()` + measure again + re-read the NML. Page write: POST /api/cues/write {dry_run} →
+  `web.write_cues` (= `cues.apply`, SystemExit → 400 message; the dialog previews first) saves the plans it used in
+  `data/cues-last-written.json` with the backup name; POST /api/cues/undo → `traktor.undo()` (no force) and puts those
+  plans back if the restored backup is that one. POST /api/samples/reveal → `web._show` (open -R / explorer /select /
+  xdg-open), only inside `sample_root()`. ▶ buttons (`button.mini[data-t]`) show ⏸ while `DECK.active` is theirs. Corrections (`corrections()`): own cue whose best bar within ±2 scores ≥ threshold and ≥0.2 more,
+  scored with the bundle's `oof` (cross-validated probabilities per trained track and grid; tracks not in
+  training use the live model; grid changed → none). Web deck: /api/audio streams a file (Starlette FileResponse, Range) only if its path is in the native
+  collection.db; the page's `DECK` (one Audio element, preload auto set on the first jump); loops play gapless in Web
+  Audio from /api/loop (`web._render_loop`: ffmpeg decode via `_cut`, edge fades and optional smoothing in numpy, f32 WAV; falls back to decoding the whole track). Save sample: POST /api/samples/save → `web.save_loop`: ffmpeg cut
+  into Traktor's Browser.Dir.Loops/<subfolder> (only existing subfolders or `Track Analyzer loops`), WAV codec by
+  `_wav_codec` (lossless: source bit depth; lossy: pcm_f32le, since a test MP3 decoded to 1.049 peak and 24-bit
+  clipped 128 samples per loop); identical to the decoded source apart from the edge fades (below); never overwrites (" (2)"); collection.db `saved_sample` (file, src_name, start, len, smooth, format) skips a loop saved before (±2 ms, any subfolder; samples not in it are read once per run from their ffprobe comment "Loop from <name> at <s> s, <len> s", files named "* from bar *.wav"), shown via /api/cues `saved_samples` drives the playhead over the zoomable canvas (`box._wave`). Web: per-track correction counts (`web.correction_counts`) start counting in a
+  background thread at `serve()` (one track per `library()` lock; predictions under `threadpool_limits(1)`, 16 vs ~100
+  ms, identical) and are saved in `data/cue-corrections.json`, keyed by the model's and collection.nml's mtimes.
+  Loop ideas (`loop_ideas`, `_idea`): the 2 best by the loop model, then the best `loopability()` (mean timbre
+  cosine of the L bars − level std/6) on the grid chosen in train among 1/2/4 bars by recall of the user's loops
+  (4: 70% within 4 bars, 19% exact, vs one loop 37% / 10%; bars-2); ≥8 bars apart; kinds from kick_on and level.
+  The suggested loop never starts within a bar of a suggested
+  cue (the user's never do), in suggest() and in the CV loop score.
+- Holds (`collection.held/set_hold/hold_matching`, `hold` command): tables `genre_keep` / `color_keep` (= the
+  colour "keep always" list) in the NATIVE collection.db (`collection.NATIVE_DB`, also while a view is in use).
+  Skipped by `_wanted` (tag, scan --write-tags), `traktor.sync` (genre and colour, even --overwrite-colors),
+  `colors review --apply`, `tempo.build_view` and `lexicon.build` (held genre keeps its Smartlist); stats
+  `genre_held` / `colour_held`.
 - `dj_genres.json`: maps Discogs styles to DJ genre names (rules with "needs" groups + BPM range); a user copy in
   `data/dj_genres.json` wins.
 
@@ -204,10 +255,40 @@ Saved run output goes in `logs/` (gitignored). Skill scripts import `from dj_tra
 - `refresh_predictions` clears a track's prediction when the current model can't place it (no stale colours).
 - `stretch` writes 32-bit float WAV for Rubber Band (16-bit input clipped peaks above full scale; R3 output then
   differs in phase only: style scores ±0.004, same key, LUFS ±0.001). R3 stays: accuracy over speed.
+- Edge fades (`web.EDGE_FADE` = 64 samples, gain √(n/64) in, mirrored out; pads and saved samples): copied from a
+  Traktor 4 Remix Deck capture (drag the track's title from a deck with an active loop onto a cell → 16-bit WAV in
+  Browser.Dir.Loops, exact loop length, no tail, NML LOOPINFO ORIGINAL_LOOP_SIZE). Ours then matches that capture
+  within 2 16-bit steps. Without them a loop ending at full level clicked in Traktor (deck loop and Remix Deck, any
+  sample rate, perfect BPM/grid; a 0.5 s tail also fixed it). `saved_sample.format` 2 = with fades (comment ", edge
+  fades"); older samples no longer count as saved.
+- Traktor's MP3 timeline (`traktor.audio_offset`): Traktor time = decoded time (ffmpeg = Essentia, checked to the
+  sample) + 1152 if the MP3 has a Xing/Info frame (`_mp3_info_frame`) + round(ffmpeg start_time × sr) (the LAME delay
+  ffmpeg skips). Verified to the sample with quantized Remix Deck captures (16-bit, edge fades, clipped at 1.0, else
+  identical to the decode) of one track per kind: 2257 (413 MP3s, LAME 3.100 and Lavc/Lavf), 1152 (31), 1681 (5),
+  0 (19, and FLAC). Onset matching against Traktor's Transients files (version byte, uint32 count, records <f8 time s,
+  <f4, <f4>) agreed only on average: periodic onsets make single tracks ambiguous; don't use it per track.
+  Used everywhere audio meets Traktor's grid: loop cuts (`_render_loop`, `saved_sample.format` 3), cue bars and
+  waveform (`cues._on_traktor_time`, BARS_VERSION bars-2 / wave-2), the page's player (`web.deck_audio`: MP3s with an
+  offset are served as a 24-bit FLAC copy with the offset in front, data/deck-audio, last 6 kept, ≈5 s to make).
+- Smooth loop point (`web._render_loop`, `?smooth=1` / save `smooth`, page checkbox in localStorage `ta-smooth-loop`):
+  the last SMOOTH_MS (5) raised-cosine crossfaded with the whole samples just before the start; all other samples
+  identical to the exact cut; `saved_sample.smooth`, comment ", 5 ms crossfade". User heard a faint click at a clean
+  (0.025 step) loop point in the page and in Traktor's Remix Deck, 2026-10-24.
+- Loop cuts (`web._cut`, page loops and saved samples): `-ss` straight to the loop start starts the MP3 decoder cold and
+  its first ~660 samples (15 ms) came out wrong, a click every time round. Decode from 0.5 s earlier and cut with an
+  output `-ss`: identical to the whole decoded track (0 diff, MP3 + FLAC, also at 0.2 s).
 - `mix_suggestions` same genre = exact genre name (genre/genre_2/my_genre, the columns it always searched), as the Smartlists; `search(genre=)`
   stays a substring search over genres, styles and the genre tag.
 
 ## Tried, no gain (don't retry without a new idea)
+- Cue model (2026-10-23, 447 tracks, CV F1 0.629 exact bar): a second stage over neighbouring bars' scores;
+  fixed top-k; "lead-in" features (next w bars vs the w before the previous w, kick share before/after,
+  biggest single-bar fall in the last 8 bars): 0.627; a bonus for 8-bar boundaries where the kick goes out/back
+  for the phrase (0.1-0.5): 0.629-0.538. Estimating each track's phrase offset from audio: right 74% vs 79% for
+  the grid marker. The user's own cues are on the marker's 8-bar grid 67% (75% on the track's own most common
+  offset; 8.5% half a phrase off, the rest 1-3 bars off, half at a kick change), the suggestions 78%.
+  On Traktor's timeline (bars-2, 2026-10-24) the cue model scores F1 0.632 (precision 0.616, recall 0.650): same as
+  before within noise; the 51 ms shift is small against a 2 s bar.
 - Colour model: hype as a feature; approachability/energy-arc alone over MAEST+sound; direct distortion measures
   (flatness, dissonance, crest, 2-5 kHz, clipping: flat across colours); MOSS-Music-8B 1-10 ratings (AUC 0.39-0.55
   vs 0.63 for the model, ~45 s/track).

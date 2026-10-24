@@ -511,9 +511,7 @@ def review(limit: int = 25, apply: bool = False, dry_run: bool = False, min_gap:
 
 def _kept_forever() -> set[str]:
     """Tracks you answered "always keep" for: review --apply never suggests recolouring them again."""
-    con = collection.db()
-    con.execute("CREATE TABLE IF NOT EXISTS color_keep (path TEXT PRIMARY KEY, colour TEXT, at TEXT)")
-    return {r[0] for r in con.execute("SELECT path FROM color_keep")}
+    return collection.held("colour")
 
 
 def kept(forget: str | None = None, keep: str | None = None, nml: str | None = None) -> dict:
@@ -546,14 +544,8 @@ def kept(forget: str | None = None, keep: str | None = None, nml: str | None = N
 
 
 def _keep_forever(paths: list[str], olds: dict[str, int]) -> None:
-    if not paths:
-        return
-    con = collection.db()
-    con.execute("CREATE TABLE IF NOT EXISTS color_keep (path TEXT PRIMARY KEY, colour TEXT, at TEXT)")
-    now = time.strftime("%Y-%m-%d %H:%M")
-    con.executemany("INSERT OR REPLACE INTO color_keep VALUES (?, ?, ?)",
-                    [(p, COLOR_NAMES[olds[p] - 1], now) for p in paths])
-    con.commit()
+    if paths:
+        collection.set_hold("colour", {p: COLOR_NAMES[olds[p] - 1] for p in paths})
 
 
 def _ask_each(changes: dict[str, tuple[int, int]], names: dict[str, str]):
@@ -618,9 +610,10 @@ def _artists(credit: str | None) -> list[str]:
     return [a.strip().lower() for a in parts if a.strip()]
 
 
-def explain(nml: str | None = None, workers: int | None = None, progress=log) -> dict:
+def explain(nml: str | None = None, workers: int | None = None, progress=log, extract: bool = True) -> dict:
     """Per-colour profile of the user's coloured tracks: sound, energy, Traktor usage, playlists,
-    position in sets and artists. Read-only for Traktor's files."""
+    position in sets and artists. Read-only for Traktor's files. extract=False skips the deep listening
+    pass for tracks without deep features (they're left out of the profile instead)."""
     import xml.etree.ElementTree as ET
     from collections import Counter, defaultdict
 
@@ -637,7 +630,8 @@ def explain(nml: str | None = None, workers: int | None = None, progress=log) ->
     paths = sorted(colors)
     if len(paths) < 30:
         raise SystemExit("Need at least 30 coloured tracks that are also scanned: uv run dj-track-analyzer scan --traktor")
-    extract_deep(paths, workers, progress)
+    if extract:
+        extract_deep(paths, workers, progress)
 
     # Traktor's own data: play counts, comments, playlists, history.
     root = ET.parse(nml_path).getroot()

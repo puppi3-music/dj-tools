@@ -199,12 +199,38 @@ td code { white-space: nowrap; }
 
 <h3 id="understand">Understanding my collection</h3>
 <ol>
+  <li>See it all in your browser: charts, a searchable track list (click a track for its details and what mixes well with it), hype, colours, the tempo view and your saved mix analyses. <b>Export snapshot</b> saves it as one HTML file to send to someone. Ctrl-C stops it.
+    <div class="cmd"><pre>uv run dj-track-analyzer web</pre></div></li>
   <li>What each colour means (see <a href="#res-explain">reading <code>colors explain</code></a>):
     <div class="cmd"><pre>uv run dj-track-analyzer colors explain</pre></div></li>
   <li>Tracks per genre, keys, BPM spread, tracks per colour:
     <div class="cmd"><pre>uv run dj-track-analyzer stats</pre></div></li>
   <li>Open the spreadsheet in Numbers or Excel and sort by <code>approachability</code> or <code>color_position</code> to go from hardest to prettiest:
     <div class="cmd"><pre>open data/collection.csv</pre></div></li>
+</ol>
+
+<h3 id="hold">Keeping a track's genre or colour as it is</h3>
+<ol>
+  <li>Open the web page, go to <b>Tracks</b>, tick the tracks and choose <b>Hold genre</b> or <b>Hold colour</b> (or use the switches in a track's panel).
+    <div class="cmd"><pre>uv run dj-track-analyzer web</pre></div></li>
+  <li>From then on <code>tag</code>, <code>traktor</code>, <code>colors review --apply</code> and <code>tempo load</code> leave that genre or colour alone. Nothing is written when you hold a track.</li>
+  <li>The same from the Terminal, by part of the file name; <code>hold</code> alone lists them, <code>--release</code> takes one off:
+    <div class="cmd"><pre>uv run dj-track-analyzer hold --genre "part of the name"</pre></div></li>
+</ol>
+
+<h3 id="cues">Cue points like mine</h3>
+<ol>
+  <li>Teach it once from the tracks you cued yourself (it listens to them first, about 13 minutes the first time), then let it listen to the rest:
+    <div class="cmd"><pre>uv run dj-track-analyzer cues train</pre></div>
+    <div class="cmd"><pre>uv run dj-track-analyzer cues scan</pre></div></li>
+  <li>Open a track in the web page: <b>Cues and phrases</b> shows its waveform (lows red, mids green, highs blue), your cues numbered on top, suggested ones below (Intro, Drop, Breakdown…) and a suggested loop. Or in the Terminal:
+    <div class="cmd"><pre>uv run dj-track-analyzer cues show "part of the name"</pre></div></li>
+  <li>Listen first: ▶ Play and the pads above the waveform jump to your cues and the suggestions (Space, 1-8, ←/→ for a bar, shift+←/→ for a phrase), and the ▶ buttons in the list let you compare your cue with a proposed correction (press ⏸ to stop).</li>
+  <li>Tick the cues (and any yellow corrections of your own cues) you want, then <b>Approve ticked</b>. That writes nothing yet; <b>Approved, not written yet</b> in the Tracks filters lists them.</li>
+  <li>Quit Traktor and press <b>Write to Traktor…</b> (in the track's panel or at the top of the Tracks tab). It lists what will change first, then writes, with a backup and an <b>Undo</b> button. New cues only fill free hot-cue slots; your cues only move where you ticked a correction. Or from the Terminal:
+    <div class="cmd"><pre>uv run dj-track-analyzer cues apply --dry-run</pre></div>
+    <div class="cmd"><pre>uv run dj-track-analyzer cues apply</pre></div></li>
+  <li>Changed your mind? Before opening Traktor: <b>Undo</b> in the page or <code>traktor --undo</code>. Train again after cueing more tracks.</li>
 </ol>
 
 <h3 id="hype">Finding hype tracks</h3>
@@ -330,6 +356,10 @@ td code { white-space: nowrap; }
 <tr><td><code>styles</code></td><td>Lists the 400 Discogs style names and checks dj_genres.json</td><td>Nothing</td></tr>
 <tr><td><code>train &lt;folder&gt;</code></td><td>Optional: teach your own genre names from example folders</td><td>App files only</td></tr>
 <tr><td><code>serve</code></td><td>Runs the MCP server for LM Studio (<code>--http</code> for Open WebUI)</td><td>Nothing</td></tr>
+<tr><td><code>web</code></td><td>Opens everything in a web page on this Mac: collection, hype, colours, tempo view, saved mix analyses. Hold genres and colours there</td><td>The hold list only</td></tr>
+<tr><td><code>cues train</code> / <code>cues scan</code> / <code>cues show</code></td><td>Learns where you put cues and loops; listens to your tracks bar by bar; suggestions for one track</td><td>App database and model file</td></tr>
+<tr><td><code>cues apply</code></td><td>Writes the cues and corrections you approved in the web page into free hot-cue slots</td><td class="changes">Traktor<br><small>undo: <code>traktor --undo</code></small></td></tr>
+<tr><td><code>hold</code></td><td>Lists the tracks whose genre or colour the writers leave alone; <code>--genre</code> / <code>--colour "name"</code> adds, with <code>--release</code> removes</td><td>The hold list only</td></tr>
 </tbody></table></div>
 
 <h3 id="options">Useful options</h3>
@@ -380,6 +410,8 @@ td code { white-space: nowrap; }
 <tr><td><code>--limit 30</code></td><td><code>tempo report</code></td><td>Tracks per list (default 15)</td></tr>
 <tr><td><code>--no-maest</code></td><td><code>setup</code></td><td>Skip the larger MAEST genre model (smaller download, slightly less accurate genres)</td></tr>
 <tr><td><code>--host 0.0.0.0</code> / <code>--port 8765</code></td><td><code>serve --http</code></td><td>Listen on your network (for Open WebUI in Docker or on another machine) / another port</td></tr>
+<tr><td><code>--export set.html</code></td><td><code>web</code></td><td>Save a read-only snapshot of the page as one file instead of opening it</td></tr>
+<tr><td><code>--logs &lt;folder&gt;</code> / <code>--no-open</code></td><td><code>web</code></td><td>Where the Mixes and Files tabs look for saved JSON (default <code>logs/</code>; repeat for several) / don't open the browser</td></tr>
 <tr><td><code>--json</code></td><td><code>colors explain</code>, <code>hype</code>, <code>tempo report</code></td><td>Raw numbers instead of tables</td></tr>
 </tbody></table></div>
 

@@ -160,6 +160,61 @@ uv run dj-track-analyzer scan --traktor ~/Music/Incoming   # both
 - A database that the hype, colour and LLM tools read.
 - `uv run dj-track-analyzer stats`: tracks per genre with average BPM, common keys, a BPM histogram, tracks per colour.
 
+### Browse it all in a web page
+
+```bash
+uv run dj-track-analyzer web
+```
+
+Opens `http://127.0.0.1:8766/` in your browser. Seven tabs:
+
+- **Overview**: the `stats` numbers as charts.
+- **Tracks**: a searchable, sortable list. Click a track for its genres, styles, moods, instruments and place on your colour scale, plus what mixes well with it.
+- **Hype**: the hype finder.
+- **Colours**: the `colors review` and `colors explain` results.
+- **Tempo view**: the `tempo report` results.
+- **Mixes**: saved `analyze` results of recorded mixes, with the timeline, tracklist check, clip suggestions and chapters.
+- **Files**: any other saved JSON.
+
+The library menu switches between your normal library and a tempo view. The page never changes Traktor, Lexicon or your files. Hype comes from the last scan, and `colors explain` leaves out tracks that haven't had the deep listening pass yet. The page runs only on this Mac. Stop it with Ctrl-C.
+
+**Hold a track's genre or colour.** In **Tracks**, tick tracks (the header box ticks every track shown) and choose **Hold genre** or **Hold colour**, or use the switches in a track's panel. A held genre or colour stays as it is in your files, Traktor and Lexicon: `tag`, `scan --write-tags`, `traktor` (also with `--overwrite-colors`), `colors review --apply` and `tempo load` skip it and count it as `genre_held` / `colour_held`. Holding writes nothing at the time; it only changes the analyzer's own list. Release a track the same way. The colour hold is the same list as `colors review`'s "keep always". From the Terminal:
+
+```bash
+uv run dj-track-analyzer hold                                # list held tracks
+uv run dj-track-analyzer hold --genre "Artist - Title"       # hold the genre of tracks whose path contains this
+uv run dj-track-analyzer hold --colour "Title" --release     # take one off the colour hold list
+```
+
+**Cue points and a mix loop, learned from yours.** The analyzer can learn where you put cues: it measures every bar on Traktor's own beat grid (loudness, bass, kick, brightness, timbre) and learns from the tracks you cued yourself which bars you cue and where you put your mix loop. Each track's panel in the web page then shows its waveform (coloured like DJ software: lows red, mids green, highs blue, ticks every 8 bars) with your cues on top and the suggestions below, named by what happens there (Intro, Drop, Breakdown, Kick in, Lift, Outro, Phrase), plus a suggested loop.
+
+```bash
+uv run dj-track-analyzer cues train            # learn from your cues (listens to the cued tracks first, ~13 min once)
+uv run dj-track-analyzer cues scan             # listen to the other tracks with a beat grid too
+uv run dj-track-analyzer cues show "Title"     # suggestions for one track, next to yours
+```
+
+**Loop ideas.** Each track gets up to 5 loops (L1-L5, in your most common loop length): the two most like where you put your own loops, then the stretches that loop most cleanly anywhere in the track (bars that sound alike at a steady level, starting on the 4-bar grid, at least 8 bars apart), each described by its sound (Peak groove, Lighter groove, No kick: pads / melody, very steady). On the test collection the DJ's own loop was within 4 bars of one of the five ideas 70% of the time (one suggestion alone: 37%). Each has a pad that plays it looped, a tick box to approve it as a loop cue, and **Save sample**: a WAV of exactly that loop (gapless, sample-identical to the track: source sample rate, the source's bit depth for lossless files, 32-bit float for MP3s, whose loud masters decode above full scale) in Traktor's sample folder, into a subfolder you pick (default `Track Analyzer loops`). Every loop gets the same tiny fades at its two ends that Traktor puts on its own captured samples (64 samples, about 1.5 ms): Traktor reads a little past the end of a looping sample, and a loop cut from a loud groove would click there. Otherwise the samples are the track's own, cut on Traktor's timeline (see **Listen**), so they start exactly on Traktor's beat. **smooth loop point** (off by default) fades the loop's last 5 ms into the audio just before its start, the way samplers do, so a sound ringing over the end isn't cut off with a click; it changes the loop pads too, so you can hear it before saving, and leaves every other sample exact (saved as "…, smooth"). A loop that's already saved (same track, start, length and smoothing, in any sample folder, found by the note each sample carries) isn't saved twice: it shows **✓ saved in** its folder instead. Files are never overwritten. **Open folder** and, after saving, **Show in Finder** (Explorer on Windows) take you to them. Needs ffmpeg.
+
+**Listen.** Above the waveform is a small deck: ▶ Play, your hot cues 1-8 and every suggestion as pads (click to jump there and play; loops play looped), and a ▶ next to each item in the approve list (corrections get ▶ yours and ▶ proposed, to hear which bar the phrase starts on); while it plays it turns into ⏸, which stops it. Click the waveform to jump; Space plays/pauses, 1-8 hit your cues, ←/→ jump a bar, shift+←/→ a phrase (8 bars). Only files in your scanned library can be played, and only on this Mac; a snapshot file has no audio. Everything in the page runs on Traktor's timeline: most MP3s start with a header frame and encoder padding that other decoders skip and Traktor plays (about 51 ms), so the player, the waveform and the cue measurements shift those files to match Traktor's beat grid exactly (checked against Traktor's own captures). The first play of such a track takes a few seconds while a matching copy is prepared.
+
+**Approve and write them.** Under the waveform, tick the suggested cues and loop you want, and any proposed correction of your own cues (a yellow arrow: one of your cues the model would put 1-2 bars away, or onto the downbeat; judged by a model that never saw that track's cues, since some off-grid cues are on purpose). **Approve ticked** only remembers your choice. Then quit Traktor and press **Write to Traktor…** (in the track's panel or at the top of the Tracks tab): it lists every new and moved cue across all approved tracks, and anything that won't fit, before writing anything, refuses while Traktor is open, makes a backup, and offers **Undo** afterwards (which also brings your approvals back). The same from the Terminal:
+
+```bash
+uv run dj-track-analyzer cues apply --dry-run   # what would be added / moved
+uv run dj-track-analyzer cues apply             # write it (backup; undo: traktor --undo)
+```
+
+Approved items move into a **✓ Approved** group and show as your cues everywhere (waveform, pads, keys 1-8: green = new, → = moved), as they'll be in Traktor; they no longer count as corrections. **Ignore** hides a correction you disagree with (Restore brings it back; it returns by itself only if the cue moves). **Rescan track** measures the track's audio again and re-reads its beat grid and cues from Traktor's collection, which Traktor saves when it quits.
+
+New cues go only into free hot-cue slots (cue points in 1-7 in time order, the loop in slot 8 when free) and are skipped within a bar of one of your cues; your own cues are only moved where you ticked a correction, and only if they're still where they were. A track whose beat grid changed after you approved is left alone. The Tracks filter **Approved, not written yet** lists what's waiting.
+
+`train` reports how often its suggestions land on the bars you cued, for tracks it never saw (cross-validated). On a test collection of about 470 tracks: 61% of suggested cues were on a bar the DJ cued, and 64% of their cues were found, against 29% / 35% for a cue every 16 bars. The loop landed within 4 bars of theirs 36% of the time. Needs at least 30 tracks with 3+ of your own cue points; train again after cueing more.
+
+**Share it.** **Export snapshot** (top right) saves the whole page as one HTML file, with the data inside: open it in any browser, offline, or send it to someone. It includes track names, file paths, playlists and play counts. A snapshot can't change anything, and mix suggestions in it use the default rule (same genre, BPM ±4%). From the Terminal: `uv run dj-track-analyzer web --export set.html`.
+
+The Mixes and Files tabs read `logs/`. Save a mix's analysis there with `analyze <mix> --tracklist --json-only > logs/<name>.json`, or drop a JSON file onto the page. Use `--logs <folder>` (repeatable) to read other folders, `--port` for another port and `--no-open` to keep the browser closed.
+
 ---
 
 ## 3. Genres in your files and in Traktor
@@ -540,7 +595,8 @@ You get an accuracy estimate per genre and the pairs it confuses most (`Hard Tra
 |---|---|---|
 | `setup [--no-maest]` | Download or check the models | model files |
 | `analyze <file> [--segments 60] [--json-only]` | One track as JSON; mixes get a timeline (`--segments`: step in seconds) and a readable summary after the JSON, on stderr (`--json-only` leaves it out) | nothing |
-| `analyze <mix> --highlights [N] [--clip-length 40] [--offset 0:14]` | Suggest the N (default 2) best stretches of a mix for short clips: loud, starting where the music rises out of something quieter. With `--offset` (how far into the finished video the first track starts, read off the video), times are given in the video | nothing |
+| `analyze <mix> --highlights [N] [--clip-length 40] [--offset 0:14]` | Suggest the N (default 2) best stretches of a mix for short clips: loud, starting where the music rises out of something quieter. Listed in time order, each with its rank (#1 best). With `--offset` (how far into the finished video the first track starts, read off the video), times are given in the video | nothing |
+| `clips <analysis.json> --video <final.mp4> [--pick 1 4] [--height 1440] [--bitrate 16M] [--out DIR] [--previews DIR] [--force]` | 720p previews of the clip suggestions in `/tmp/clip-previews/`; with `--pick`, the chosen clips (numbers or ranges like `20:30-21:10`) at full quality next to the video. Needs ffmpeg | new video files |
 | `analyze <mix> --tracklist --chapters --offset 0:14` | YouTube chapter lines from the tracklist, timed for a video where the first track starts at `--offset` | nothing |
 | `analyze <mix> --tracklist [history.nml] [--start HH:MM:SS]` | A recorded mix checked against Traktor's history file: each track's key heard vs Traktor's, the tempo it was played at, key lock, and the mix's genre with the psy-at-speed habit held back (see [Checking a recorded mix](#checking-a-recorded-mix)) | nothing |
 | `scan` | Analyse a collection (section 2) | app database, CSV |
@@ -592,6 +648,8 @@ dj-track-analyzer/
 │   ├── tempo.py            tempo view
 │   ├── lexicon.py          Lexicon Local API
 │   ├── clips.py            clip previews and clips cut from a mix's video
+│   ├── web.py, web/        the `web` command's page
+│   ├── cues.py             cue points and mix loops learned from your own cues
 │   └── dj_genres.json      Discogs styles → DJ genre rules
 ├── logs/                   saved command output (`… 2>&1 | tee logs/scan.txt`), not in git
 ├── pyproject.toml, uv.lock

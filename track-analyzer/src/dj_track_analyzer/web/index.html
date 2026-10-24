@@ -1,0 +1,1429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Track Analyzer</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f6f4; --surface: #fcfcfb; --surface-2: #f0efec; --line: #e2e1dc; --line-strong: #c9c8c1;
+  --text: #0b0b0b; --text-2: #52514e; --text-3: #7b7a74;
+  --accent: #2a78d6; --accent-soft: #dce9f9; --bar: #2a78d6; --bar-2: #9cc0ec;
+  --good: #0a7d32; --warn: #a15c00; --bad: #c0322f;
+  --c-red: #e5312f; --c-orange: #f08a24; --c-yellow: #e8c51c; --c-green: #3fae49;
+  --c-blue: #2e7fd8; --c-violet: #8a4fd6; --c-magenta: #d63a9c;
+  --radius: 10px; --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --surface-2: #242422; --line: #2e2e2b; --line-strong: #45443f;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+    --accent: #5b9ef0; --accent-soft: #1d2f47; --bar: #3987e5; --bar-2: #2a4f7c;
+    --good: #4cc477; --warn: #e3a33b; --bad: #ef6b68;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --surface-2: #242422; --line: #2e2e2b; --line-strong: #45443f;
+  --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+  --accent: #5b9ef0; --accent-soft: #1d2f47; --bar: #3987e5; --bar-2: #2a4f7c;
+  --good: #4cc477; --warn: #e3a33b; --bad: #ef6b68;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1, h2, h3 { margin: 0; line-height: 1.25; }
+h2 { font-size: 20px; margin-bottom: 4px; }
+h3 { font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+.muted { color: var(--text-2); }
+.dim { color: var(--text-3); }
+.small { font-size: 12px; }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); font-size: 12px; }
+
+header { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+.bar-top { display: flex; align-items: center; gap: 16px; padding: 10px 20px; flex-wrap: wrap; }
+.brand { font-weight: 700; font-size: 15px; white-space: nowrap; }
+.brand span { color: var(--text-3); font-weight: 500; }
+nav { display: flex; gap: 2px; flex-wrap: wrap; }
+nav a { padding: 6px 12px; border-radius: 8px; color: var(--text-2); font-weight: 500; }
+nav a:hover { background: var(--surface-2); text-decoration: none; }
+nav a.on { background: var(--accent-soft); color: var(--accent); }
+.spacer { flex: 1; }
+select, input, button { font: inherit; color: inherit; }
+select, input[type=text], input[type=number], input[type=search] {
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 5px 8px; min-width: 0; }
+input[type=number] { width: 80px; }
+button { background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+button:hover { border-color: var(--text-3); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+label.inline { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.libnote { padding: 6px 20px; font-size: 12px; background: var(--surface-2); color: var(--text-2); border-top: 1px solid var(--line); }
+.libnote b { color: var(--text); }
+
+main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+.page-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; min-width: 0; }
+.card + .card, .card + .grid, .grid + .card, .grid + .grid, .tiles + .card { margin-top: 16px; }
+.grid > .card, .grid > div > .card:first-child { margin-top: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.tile .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .l { font-size: 12px; color: var(--text-2); }
+.filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.err { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--bad) 40%, var(--line));
+  color: var(--text); padding: 12px 14px; border-radius: var(--radius); white-space: pre-wrap; }
+.loading { color: var(--text-3); padding: 24px 0; }
+.note { font-size: 12px; color: var(--text-2); margin-top: 8px; }
+
+/* bar lists */
+.bars { display: grid; grid-template-columns: minmax(80px, max-content) 1fr auto; gap: 4px 10px; align-items: center; }
+.bars .lab { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; display: flex; align-items: center; gap: 6px; }
+.bars .track { height: 14px; position: relative; }
+.bars .fill { height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+.bars .val { color: var(--text-2); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; font-size: 12px; }
+.cols { display: flex; align-items: flex-end; gap: 2px; height: 160px; padding-top: 6px; border-bottom: 1px solid var(--line-strong); }
+.cols .c { flex: 1; background: var(--bar); border-radius: 4px 4px 0 0; min-height: 2px; }
+.cols .c:hover, .bars .row-h:hover .fill { background: var(--accent); filter: brightness(1.15); }
+.cols-x { display: flex; gap: 2px; font-size: 11px; color: var(--text-3); }
+.cols-x span { flex: 1; text-align: center; overflow: hidden; white-space: nowrap; }
+
+/* colour swatches */
+.sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; flex: none; vertical-align: -1px; }
+.sw.pred { background: transparent !important; border: 2px dashed currentColor; }
+.sw-Red { background: var(--c-red); color: var(--c-red); } .sw-Orange { background: var(--c-orange); color: var(--c-orange); }
+.sw-Yellow { background: var(--c-yellow); color: var(--c-yellow); } .sw-Green { background: var(--c-green); color: var(--c-green); }
+.sw-Blue { background: var(--c-blue); color: var(--c-blue); } .sw-Violet { background: var(--c-violet); color: var(--c-violet); }
+.sw-Magenta { background: var(--c-magenta); color: var(--c-magenta); }
+.colour { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+/* tables */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; position: sticky; top: 0; background: var(--surface); }
+th.sort { cursor: pointer; user-select: none; }
+th.sort:hover { color: var(--text); }
+th.sort.asc::after { content: " ▲"; font-size: 9px; } th.sort.desc::after { content: " ▼"; font-size: 9px; }
+td.r, th.r { text-align: right; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--surface-2); }
+tr.sel td { background: var(--accent-soft); }
+.trk { min-width: 220px; }
+.trk .t { font-weight: 500; }
+.trk .a { color: var(--text-2); font-size: 12px; }
+.chip { display: inline-block; padding: 1px 7px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line);
+  font-size: 12px; white-space: nowrap; }
+.chip.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, var(--line)); }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.chip.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); }
+.lock { display: inline-flex; vertical-align: -2px; color: var(--text-2); margin-left: 4px; }
+.selbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 10px; border-radius: var(--radius);
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.holds { display: grid; grid-template-columns: max-content 1fr; gap: 8px 12px; align-items: center; }
+button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+td.cb, th.cb { width: 28px; padding-right: 0; }
+.wavewrap { position: relative; background: #0c0c0e; border-radius: 8px; padding: 0; overflow: hidden; }
+.wavewrap canvas { display: block; width: 100%; height: 206px; cursor: crosshair; }
+.playhead { position: absolute; top: 22px; height: 110px; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 6px rgba(255,255,255,.8);
+  pointer-events: none; display: none; }
+.playhead.ov { top: 170px; height: 32px; box-shadow: none; }
+.deck { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.deck .time { font-family: var(--mono); font-size: 13px; min-width: 210px; }
+.pads { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+.pads button { padding: 3px 8px; font-size: 12px; }
+.pads button.mine { background: #fff; color: #111; border-color: #fff; font-weight: 700; min-width: 28px; }
+.pads button.mine.new { background: #4cd17a; border-color: #4cd17a; }
+.pads button.sug { border-color: #6fb4ff; }
+.pads button.lp { border-color: #f08a24; }
+.pads button.on { background: #f08a24; color: #111; }
+.apgroup { margin: 10px 0 4px; }
+dialog.write { border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--text); padding: 18px 20px;
+  width: min(640px, calc(100vw - 32px)); max-height: 80vh; overflow-y: auto; box-shadow: 0 16px 48px rgba(0,0,0,.3); }
+dialog.write::backdrop { background: rgba(0,0,0,.35); }
+dialog.write h3 { margin: 0 0 8px; }
+dialog.write ul { margin: 6px 0; padding-left: 18px; font-size: 12px; max-height: 260px; overflow-y: auto; }
+label.approved { background: color-mix(in srgb, var(--good) 10%, transparent); border-radius: 6px; }
+.apgroup h4 { margin: 0 0 4px; font-size: 13px; }
+.fixbox { border-left: 3px solid #ffd23f; background: color-mix(in srgb, #ffd23f 9%, transparent); border-radius: 0 8px 8px 0; padding: 8px 10px; }
+.fixbox .fix { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, #ffd23f 25%, transparent); }
+.fixbox .fix:last-child { border-bottom: 0; }
+.fixbox .move { font-weight: 650; font-size: 14px; }
+.fixbox .why { font-size: 12px; color: var(--text-2); }
+button.mini { padding: 0 6px; font-size: 11px; margin-left: 6px; line-height: 18px; }
+button.mini.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.wavehl { position: absolute; top: 22px; height: 108px; background: rgba(255,255,255,.16); border-left: 1px solid rgba(255,255,255,.6);
+  pointer-events: none; display: none; }
+.cuestrip svg { width: 100%; height: auto; display: block; overflow: visible; }
+.cuestrip .lbl { font: 11px system-ui, sans-serif; fill: var(--text-2); }
+.hype { display: inline-block; min-width: 26px; text-align: center; border-radius: 6px; font-weight: 650; font-variant-numeric: tabular-nums; padding: 0 4px; }
+
+/* drawer */
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(720px, 100vw); background: var(--surface); border-left: 1px solid var(--line);
+  box-shadow: -12px 0 32px rgba(0,0,0,.18); z-index: 40; overflow-y: auto; padding: 20px; transform: translateX(105%); transition: transform .18s ease; }
+.drawer.open { transform: none; }
+.drawer .close { position: absolute; top: 14px; right: 14px; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 12px 0; }
+.facts dt { color: var(--text-2); }
+.facts dd { margin: 0; }
+.section { margin-top: 18px; }
+.scale { display: grid; grid-template-columns: repeat(7, 1fr); position: relative; height: 26px; border-radius: 6px; overflow: hidden; }
+.scale div { height: 100%; }
+.scale-marks { position: relative; height: 34px; margin-top: 2px; }
+.scale-marks .m { position: absolute; transform: translateX(-50%); font-size: 11px; text-align: center; white-space: nowrap; }
+.scale-marks .m::before { content: ""; display: block; width: 2px; height: 8px; margin: 0 auto 1px; background: var(--text); }
+.scale-marks.top { height: 22px; margin: 0 0 2px; }
+.scale-marks.top .m::before { display: none; }
+.scale-marks.top .m::after { content: ""; display: block; width: 2px; height: 6px; margin: 1px auto 0; background: var(--text); }
+
+/* mixes */
+.split { display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start; }
+.list a { display: block; padding: 8px 10px; border-radius: 8px; color: var(--text); }
+.list a:hover { background: var(--surface-2); text-decoration: none; }
+.list a.on { background: var(--accent-soft); }
+.list .k { font-size: 11px; color: var(--text-3); }
+.timeline { display: flex; gap: 2px; align-items: flex-end; height: 120px; }
+.timeline .seg { flex: 1; background: var(--bar); border-radius: 4px 4px 0 0; min-height: 3px; position: relative; }
+.timeline .seg:hover { background: var(--accent); filter: brightness(1.15); }
+.timeline .seg.hl { background: var(--c-orange); }
+.tl-x { display: flex; gap: 2px; font-size: 10px; color: var(--text-3); margin-top: 3px; }
+.tl-x span { flex: 1; text-align: left; overflow: hidden; white-space: nowrap; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); margin-top: 6px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+textarea { width: 100%; min-height: 220px; font-family: var(--mono); font-size: 12px; background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px; resize: vertical; }
+.drop { border: 2px dashed var(--line-strong); border-radius: var(--radius); padding: 18px; text-align: center; color: var(--text-2); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+
+/* json tree */
+.tree { font-family: var(--mono); font-size: 12px; line-height: 1.6; }
+.tree details { margin-left: 14px; }
+.tree summary { cursor: pointer; margin-left: -14px; }
+.tree .kv { margin-left: 0; }
+.tree .key { color: var(--accent); }
+.tree .s { color: var(--good); } .tree .n { color: var(--warn); } .tree .b { color: var(--c-violet); }
+
+/* heat cells */
+.heat td.h { text-align: right; font-variant-numeric: tabular-nums; }
+.stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; gap: 1px; background: var(--surface); min-width: 120px; }
+.stack div { height: 100%; }
+
+#tip { position: fixed; z-index: 60; pointer-events: none; background: var(--text); color: var(--surface); padding: 5px 8px; border-radius: 6px;
+  font-size: 12px; max-width: 320px; white-space: pre-line; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+
+#lib { max-width: 280px; }
+@media (max-width: 760px) {
+  .bar-top { padding: 10px 16px; gap: 8px; }
+  nav { flex-wrap: nowrap; overflow-x: auto; width: 100%; order: 3; }
+  nav a { padding: 6px 10px; white-space: nowrap; }
+  #lib { max-width: calc(100vw - 190px); }
+  .libnote { padding: 6px 16px; }
+  .drawer { padding: 16px; }
+  main { padding: 16px; }
+  .split { grid-template-columns: 1fr; }
+  .grid.two { grid-template-columns: 1fr; }
+  .bars .lab { max-width: 130px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar-top">
+    <div class="brand">Track Analyzer <span id="mode"></span></div>
+    <nav id="nav">
+      <a href="#overview">Overview</a><a href="#tracks">Tracks</a><a href="#hype">Hype</a><a href="#colours">Colours</a>
+      <a href="#tempo">Tempo view</a><a href="#mixes">Mixes</a><a href="#files">Files</a>
+    </nav>
+    <div class="spacer"></div>
+    <label class="inline small muted" id="libwrap">Library <select id="lib"></select></label>
+    <a id="export" href="/export" download><button tabindex="-1" data-tip="Save every tab as one HTML file you can keep or send. It can't change anything.">Export snapshot</button></a>
+    <button id="theme" title="Switch light/dark">◐</button>
+  </div>
+  <div class="libnote" id="libnote" hidden></div>
+</header>
+<main id="main"><div class="loading">Loading…</div></main>
+<aside class="drawer" id="drawer" aria-hidden="true"><button class="close" onclick="closeDrawer()">✕</button><div id="drawer-body"></div></aside>
+<div id="tip"></div>
+
+<script>
+"use strict";
+const COLOURS = ["Red", "Orange", "Yellow", "Green", "Blue", "Violet", "Magenta"];
+const S = { lib: "native", libs: null, tracks: {}, trackSort: { key: "track", dir: 1 }, page: "overview" };
+try { S.lib = localStorage.getItem("ta-lib") || "native"; } catch (e) {}
+try { const t = localStorage.getItem("ta-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+// ---------- helpers ----------
+const $ = (s, el = document) => el.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (v, d = 2) => v == null || v === "" ? "–" : typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(d)) : esc(v);
+const pct = v => v == null ? "–" : Math.round(v * 100) + "%";
+const mmss = s => s == null ? "–" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+const sw = (c, predicted) => c ? `<span class="sw sw-${esc(c)}${predicted ? " pred" : ""}"></span>` : "";
+const colour = (c, predicted) => c ? `<span class="colour" data-tip="${predicted ? "Predicted by the colour model (not set by you)" : "Your colour in Traktor"}">${sw(c, predicted)}${esc(c)}${predicted ? "?" : ""}</span>` : `<span class="dim">–</span>`;
+const trackName = t => `<div class="trk"><div class="t">${esc(t.title || t.filename || t.file || "")}</div>${t.artist ? `<div class="a">${esc(t.artist)}</div>` : ""}</div>`;
+function hypeBadge(h) {
+  if (h == null) return `<span class="dim">–</span>`;
+  const a = 0.12 + (h - 1) / 9 * 0.7;
+  return `<span class="hype" style="background:color-mix(in srgb, var(--bar) ${Math.round(a * 100)}%, transparent);color:${h >= 6 ? "#fff" : "var(--text)"}">${h}</span>`;
+}
+const parseScores = s => (s || "").split(";").map(x => x.trim()).filter(Boolean).map(x => {
+  const m = x.match(/^(.*)\s+(-?[\d.]+)$/); return m ? { label: m[1], value: +m[2] } : { label: x, value: null };
+});
+
+const SNAP = window.SNAPSHOT || null;
+const LOCK = `<svg width="11" height="12" viewBox="0 0 11 12" aria-hidden="true"><rect x="1" y="5" width="9" height="7" rx="1.5" fill="currentColor"/><path d="M3 5V3.5a2.5 2.5 0 0 1 5 0V5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>`;
+const lock = what => `<span class="lock" data-tip="${what} held: kept as it is when writing to files, Traktor or Lexicon">${LOCK}</span>`;
+if (SNAP) {
+  $("#mode").textContent = `· snapshot of ${SNAP.made}`;
+  $("#export").remove();
+  document.querySelector('#nav a[href="#files"]').remove();
+} else $("#mode").textContent = "· local";
+function snapHype(h, p) {
+  const src = p.gems == 1 ? h.gems : p.least == 1 ? h.least : h.most;
+  if (src.error) return src;
+  const keys = p.key ? camelotNeighbours(p.key) : null, bpm = p.bpm ? +p.bpm : null, tol = +(p.tolerance || 4);
+  const tracks = src.tracks.filter(t => (!p.colour || (t.colour || "").toLowerCase() === p.colour.toLowerCase())
+    && (!bpm || (t.bpm && Math.abs(t.bpm - bpm) <= bpm * tol / 100)) && (!keys || keys.includes(t.camelot)));
+  const filters = [p.colour && `colour ${p.colour}`, bpm && `BPM ${bpm} ±${tol}%`, keys && `Camelot ${keys.join(", ")}`,
+    p.gems == 1 && "gems: hype 8+ but 4 stars or fewer, or played at most once"].filter(Boolean);
+  return { scored: src.scored, matches: tracks.length, showing: Math.min(+p.limit || 100, tracks.length), order: p.least == 1 ? "least hype first" : "most hype first",
+    filters: filters.length ? filters : ["none"], tracks: tracks.slice(0, +p.limit || 100) };
+}
+function snapApi(path, p) {
+  const D = SNAP, lib = p.lib || "native";
+  const res = (() => { switch (path) {
+    case "libraries": return D.libraries;
+    case "stats": return D.stats[lib];
+    case "tracks": return D.tracks[lib];
+    case "suggest": {
+      const sg = D.suggest[lib]?.[p.path];
+      if (!sg || sg.error) return sg;
+      const by = new Map(D.tracks[lib].tracks.map(t => [t.path, t]));
+      return { rule: sg.rule, matches: sg.matches, tracks: sg.paths.map(x => by.get(x)).filter(Boolean).map(t => ({ ...t, bpm: t.mix_bpm, camelot: t.mix_camelot })) };
+    }
+    case "hype": return D.hype[lib] && snapHype(D.hype[lib], p);
+    case "colours/review": return D.review;
+    case "colours/explain": return D.explain;
+    case "colours/kept": return D.kept;
+    case "tempo/report": return D.tempo[String(+p.bpm)];
+    case "cues": return D.cues?.[p.path] || { error: "No cue suggestions for this track in this snapshot." };
+    case "saved": return { files: D.saved, folders: ["this snapshot"] };
+    case "saved-file": return D.files[p.id];
+  } })();
+  if (!res) throw new Error("Not in this snapshot.");
+  if (res.error) throw new Error(res.error);
+  return res;
+}
+async function hold(paths, kind, on) {
+  const r = await fetch("/api/hold", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paths, kind, on }) });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  const set = new Set(paths);
+  for (const list of Object.values(S.tracks)) for (const t of list) if (set.has(t.path)) { if (on) t["held_" + kind] = true; else delete t["held_" + kind]; }
+  return d;
+}
+async function api(path, params = {}) {
+  if (SNAP) return snapApi(path, params);
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+  let r;
+  for (let attempt = 0; ; attempt++) {
+    try { r = await fetch(`/api/${path}${q.toString() ? "?" + q : ""}`); break; }
+    catch (e) { // no answer at all: the server is restarting, or was stopped
+      if (attempt >= 2) throw new Error("Can't reach the Track Analyzer server. Is `uv run dj-track-analyzer web` still running in Terminal?");
+      await new Promise(ok => setTimeout(ok, 600 * (attempt + 1)));
+    }
+  }
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+}
+const errBox = e => `<div class="err">${esc(e.message || e)}${SNAP ? "" : ` <button style="margin-left:8px" onclick="route()">Retry</button>`}</div>`;
+
+function bars(items, { max, fmtVal = v => fmt(v), colourLabels = false } = {}) {
+  if (!items.length) return `<div class="dim">Nothing yet.</div>`;
+  const m = max ?? Math.max(...items.map(i => i.value || 0), 1e-9);
+  return `<div class="bars">${items.map(i => `
+    <div class="lab" title="${esc(i.label)}">${colourLabels ? sw(i.label) : ""}${esc(i.label)}</div>
+    <div class="track row-h" data-tip="${esc(i.tip || `${i.label}: ${fmtVal(i.value)}`)}"><div class="fill" style="width:${Math.max(0, (i.value || 0) / m * 100)}%"></div></div>
+    <div class="val">${i.valText ?? fmtVal(i.value)}</div>`).join("")}</div>`;
+}
+function columns(items) {
+  const m = Math.max(...items.map(i => i.value), 1);
+  const every = Math.ceil(items.length / 12);
+  return `<div class="cols">${items.map(i => `<div class="c" style="height:${i.value / m * 100}%" data-tip="${esc(i.label)}: ${i.value}"></div>`).join("")}</div>
+    <div class="cols-x">${items.map((i, k) => `<span>${k % every ? "" : esc(i.short ?? i.label)}</span>`).join("")}</div>`;
+}
+function table(cols, rows, { onRow, rowAttr } = {}) {
+  return `<div class="tablewrap"><table><thead><tr>${cols.map(c => `<th class="${c.r ? "r" : ""}">${esc(c.h)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map((r, i) => `<tr ${rowAttr ? rowAttr(r, i) : ""}>${cols.map(c => `<td class="${c.r ? "r num" : ""}">${c.f(r)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+// tooltip
+const tip = $("#tip");
+document.addEventListener("mouseover", e => {
+  const el = e.target.closest("[data-tip]");
+  if (!el) { tip.style.display = "none"; return; }
+  tip.textContent = el.dataset.tip; tip.style.display = "block";
+});
+document.addEventListener("mousemove", e => {
+  if (tip.style.display !== "block") return;
+  const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8), y = e.clientY + 16 + tip.offsetHeight > innerHeight ? e.clientY - tip.offsetHeight - 10 : e.clientY + 16;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+});
+
+$("#theme").onclick = () => {
+  const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("ta-theme", root.dataset.theme); } catch (e) {}
+};
+
+// ---------- library ----------
+async function loadLibs() {
+  S.libs = await api("libraries");
+  const sel = $("#lib");
+  sel.innerHTML = S.libs.libraries.map(l => `<option value="${esc(l.id)}">${esc(l.label)}</option>`).join("");
+  if (!S.libs.libraries.some(l => l.id === S.lib)) S.lib = "native";
+  sel.value = S.lib;
+  sel.onchange = () => { S.lib = sel.value; try { localStorage.setItem("ta-lib", S.lib); } catch (e) {} route(); };
+  libNote();
+}
+function libNote() {
+  const n = $("#libnote"), v = S.libs.loaded_view, usesLib = ["overview", "tracks", "hype"].includes(S.page);
+  $("#libwrap").style.visibility = usesLib ? "visible" : "hidden";
+  const parts = [];
+  if (v) parts.push(`Traktor has the <b>${v} BPM view</b> loaded, so its Genre/Colour/Comment 2 show ${v} BPM values.`);
+  if (usesLib && S.lib !== "native") parts.push(`Showing the <b>${esc(S.lib.replace("at-", ""))} BPM tempo view</b>: every track as heard stretched to that tempo with key lock.`);
+  n.innerHTML = parts.join(" "); n.hidden = !parts.length;
+}
+async function getTracks() {
+  if (!S.tracks[S.lib]) {
+    const d = await api("tracks", { lib: S.lib }), lib = S.lib;
+    S.tracks[lib] = d.tracks;
+    S.fixesPending = !!d.corrections_pending;
+    if (d.corrections_pending) setTimeout(async () => {  // corrections are still being counted: fetch again
+      delete S.tracks[lib];
+      await getTracks();
+      if (S.page === "tracks") route();
+    }, 4000);
+  }
+  return S.tracks[S.lib];
+}
+
+// ---------- router ----------
+const PAGES = { overview: pageOverview, tracks: pageTracks, hype: pageHype, colours: pageColours, tempo: pageTempo, mixes: pageMixes, files: pageFiles };
+async function route() {
+  const [page, ...rest] = (location.hash.slice(1) || "overview").split("/");
+  S.page = PAGES[page] ? page : "overview";
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + S.page));
+  if (S.libs) libNote();
+  const main = $("#main"), me = S.routeId = (S.routeId || 0) + 1;
+  main.innerHTML = `<div class="loading">Loading…</div>`;
+  try { await PAGES[S.page](main, decodeURIComponent(rest.join("/"))); }
+  catch (e) { if (me === S.routeId) main.innerHTML = errBox(e); }
+}
+addEventListener("hashchange", route);
+
+// ---------- overview ----------
+async function pageOverview(main) {
+  const d = await api("stats", { lib: S.lib });
+  const genres = Object.entries(d.genres).map(([g, v]) => ({ label: g, value: v.tracks, valText: `${v.tracks} · ${v.avg_bpm ?? "–"} BPM`, tip: `${g}: ${v.tracks} tracks, average ${v.avg_bpm ?? "–"} BPM` }));
+  const hist = Object.entries(d.bpm_histogram).map(([b, n]) => ({ label: `${b} BPM`, short: b.split("-")[0], value: n }));
+  const keys = Object.entries(d.top_camelot_keys).map(([k, n]) => ({ label: k, value: n }));
+  const cols = COLOURS.filter(c => d.colours[c]).map(c => ({ label: c, value: d.colours[c] }));
+  const st = S.libs.status;
+  main.innerHTML = `
+    <div class="page-head"><div><h2>Overview</h2><div class="muted">${esc(S.libs.libraries.find(l => l.id === S.lib)?.label || "")}</div></div></div>
+    <div class="tiles">
+      <div class="tile"><div class="v">${d.tracks}</div><div class="l">scanned files</div></div>
+      <div class="tile"><div class="v">${Object.keys(d.genres).length}</div><div class="l">genres in use</div></div>
+      <div class="tile"><div class="v">${d.errors}</div><div class="l">analysis errors</div></div>
+      <div class="tile"><div class="v" style="font-size:16px;padding-top:6px">${esc(d.last_scan || "–")}</div><div class="l">last scan</div></div>
+    </div>
+    <div class="grid two">
+      <div class="card"><h3>Genres <span class="dim small">(top genre per track)</span></h3>${bars(genres)}</div>
+      <div>
+        <div class="card"><h3>BPM <span class="dim small">(Traktor's where it has one, in 5-BPM bins)</span></h3>${columns(hist)}</div>
+        <div class="card"><h3>Colours <span class="dim small">(yours, else predicted)</span></h3>${bars(cols, { colourLabels: true })}</div>
+        <div class="card"><h3>Most common keys <span class="dim small">(Camelot)</span></h3>${bars(keys)}</div>
+      </div>
+    </div>
+    <div class="card"><h3>Tempo views</h3>
+      <dl class="facts"><dt>Traktor</dt><dd>${esc(st.loaded_in_traktor)}</dd><dt>Lexicon</dt><dd>${esc(st.loaded_in_lexicon)}</dd>
+      ${Object.entries(st.views).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v.tracks} tracks <span class="dim mono">${esc(v.folder)}</span></dd>`).join("") || "<dt>Views</dt><dd class='dim'>none scanned (tempo scan --bpm 145)</dd>"}</dl>
+    </div>`;
+}
+
+// ---------- tracks ----------
+const TF = { q: "", genre: "", colour: "", key: "", harmonic: false, bpmMin: "", bpmMax: "", type: "track", held: "", cues: "" };
+const SEL = new Set();
+function camelotNeighbours(code) {
+  const m = code.trim().toUpperCase().match(/^(\d{1,2})([AB])$/); if (!m) return [code.trim().toUpperCase()];
+  const n = +m[1], l = m[2], w = x => (x - 1 + 12) % 12 + 1;
+  return [`${n}${l}`, `${w(n - 1)}${l}`, `${w(n + 1)}${l}`, `${n}${l === "A" ? "B" : "A"}`];
+}
+const colourOf = t => t.traktor_color || t.color;
+const colourPos = t => t.traktor_color ? COLOURS.indexOf(t.traktor_color) + 1 : t.color_position ?? 99;
+const SORTS = {
+  track: t => `${t.artist || ""} ${t.title || t.filename}`.toLowerCase(), bpm: t => t.mix_bpm ?? 1e9, key: t => {
+    const m = (t.mix_camelot || "").match(/(\d+)([AB])/); return m ? +m[1] * 2 + (m[2] === "B") : 1e9; },
+  genre: t => (t.genre || "~").toLowerCase(), colour: colourPos, cues: t => -((t.corrections || 0) * 100 + (t.own_cues || 0)), hype: t => -(t.hype ?? -1), lufs: t => -(t.lufs ?? -99), length: t => t.duration_sec ?? 0,
+};
+async function pageTracks(main, open) {
+  let all = await getTracks();
+  const genres = [...new Set(all.flatMap(t => [t.genre, t.genre_2, t.my_genre]).filter(Boolean))].sort();
+  main.innerHTML = `
+    <div class="page-head"><div><h2>Tracks</h2><div class="muted" id="tcount"></div></div><div class="spacer"></div>
+      ${!SNAP ? `<button id="t-write" data-tip="Write every approved track's cues into Traktor (shows what changes first)">Write approved cues to Traktor…</button>` : ""}</div>
+    <div class="filters">
+      <input type="search" id="f-q" placeholder="Search artist, title, file, album…" style="width:260px" value="${esc(TF.q)}">
+      <select id="f-genre"><option value="">All genres</option>${genres.map(g => `<option ${g === TF.genre ? "selected" : ""}>${esc(g)}</option>`).join("")}</select>
+      <select id="f-colour"><option value="">All colours</option>${COLOURS.map(c => `<option ${c === TF.colour ? "selected" : ""}>${c}</option>`).join("")}</select>
+      <label class="inline">BPM <input type="number" id="f-bmin" placeholder="min" value="${esc(TF.bpmMin)}"> – <input type="number" id="f-bmax" placeholder="max" value="${esc(TF.bpmMax)}"></label>
+      <label class="inline">Key <input type="text" id="f-key" placeholder="8A" style="width:56px" value="${esc(TF.key)}"></label>
+      <label class="inline"><input type="checkbox" id="f-harm" ${TF.harmonic ? "checked" : ""}> mixes with it</label>
+      <select id="f-type"><option value="track">Tracks</option><option value="dj_mix">Mixes</option><option value="">Everything</option></select>
+      <select id="f-held"><option value="">Held or not</option><option value="genre">Genre held</option><option value="colour">Colour held</option><option value="any">Anything held</option><option value="none">Nothing held</option></select>
+      <select id="f-cues"><option value="">Cued or not</option><option value="none">No cues of yours</option><option value="some">Has your cues</option><option value="approved">Approved, not written yet</option><option value="fixes">Has proposed corrections</option></select>
+    </div>
+    <div id="selbar"></div>
+    <div class="card" style="padding:0"><div id="ttable"></div></div>`;
+  $("#t-write")?.addEventListener("click", () => writeToTraktor(() => S.reloadTracks()));
+  $("#f-type").value = TF.type; $("#f-held").value = TF.held; $("#f-cues").value = TF.cues;
+  const bind = (id, key, ev = "input", get = el => el.value) => { $(id).addEventListener(ev, e => { TF[key] = get(e.target); draw(); }); };
+  bind("#f-q", "q"); bind("#f-genre", "genre", "change"); bind("#f-colour", "colour", "change"); bind("#f-bmin", "bpmMin");
+  bind("#f-bmax", "bpmMax"); bind("#f-key", "key"); bind("#f-harm", "harmonic", "change", el => el.checked); bind("#f-type", "type", "change"); bind("#f-held", "held", "change"); bind("#f-cues", "cues", "change");
+  let shown = [];
+  function selbar() {
+    const n = SEL.size, box = $("#selbar");
+    if (SNAP || !n) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="selbar"><b>${n} selected</b>
+      <button data-h="genre" data-on="1">Hold genre</button><button data-h="colour" data-on="1">Hold colour</button>
+      <button data-h="genre" data-on="0">Release genre</button><button data-h="colour" data-on="0">Release colour</button>
+      <button data-clear>Clear selection</button><span class="small muted" id="selmsg"></span></div>`;
+    box.querySelector("[data-clear]").onclick = () => { SEL.clear(); draw(); };
+    box.querySelectorAll("[data-h]").forEach(b => b.onclick = async () => {
+      try { await hold([...SEL], b.dataset.h, b.dataset.on === "1"); draw(); $("#selmsg").textContent = b.dataset.on === "1" ? `${b.dataset.h} held` : `${b.dataset.h} released`; }
+      catch (e) { $("#selmsg").textContent = e.message; }
+    });
+  }
+  function draw() {
+    const q = TF.q.toLowerCase(), keys = TF.key ? (TF.harmonic ? camelotNeighbours(TF.key) : [TF.key.trim().toUpperCase()]) : null;
+    let rows = all.filter(t => (!TF.type || t.type === TF.type)
+      && (!q || [t.artist, t.title, t.filename, t.album, t.folder].some(v => (v || "").toLowerCase().includes(q)))
+      && (!TF.genre || [t.genre, t.genre_2, t.my_genre].includes(TF.genre))
+      && (!TF.colour || colourOf(t) === TF.colour)
+      && (TF.bpmMin === "" || (t.mix_bpm ?? -1) >= +TF.bpmMin) && (TF.bpmMax === "" || (t.mix_bpm ?? 1e9) <= +TF.bpmMax)
+      && (!keys || keys.includes(t.mix_camelot))
+      && (!TF.held || (TF.held === "genre" ? t.held_genre : TF.held === "colour" ? t.held_colour : TF.held === "any" ? t.held_genre || t.held_colour : !t.held_genre && !t.held_colour)));
+    rows = rows.filter(t => !TF.cues || (TF.cues === "none" ? !t.own_cues : TF.cues === "approved" ? t.cues_approved : TF.cues === "fixes" ? t.corrections > 0 : t.own_cues > 0));
+    shown = rows;
+    const { key, dir } = S.trackSort, f = SORTS[key];
+    rows.sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+    $("#tcount").textContent = `${rows.length} of ${all.length} files${S.fixesPending ? " · counting proposed corrections (about 10 s)…" : ""}`;
+    const head = [["colour", "Colour"], ["track", "Track"], ["bpm", "BPM", 1], ["key", "Key"], ["genre", "Genre"], ["hype", "Hype", 1], ["cues", "Cues", 1], ["lufs", "LUFS", 1], ["length", "Length", 1]];
+    const scroll = $("#ttable .tablewrap")?.scrollTop || 0;
+    $("#ttable").innerHTML = `<div class="tablewrap" style="max-height:calc(100vh - 230px);overflow:auto"><table>
+      <thead><tr>${SNAP ? "" : `<th class="cb"><input type="checkbox" id="selall" data-tip="Select every track shown" ${rows.length && rows.every(t => SEL.has(t.path)) ? "checked" : ""}></th>`}${head.map(([k, h, r]) => `<th class="sort ${r ? "r" : ""} ${S.trackSort.key === k ? (dir > 0 ? "asc" : "desc") : ""}" data-k="${k}">${h}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map(t => `<tr class="click ${SEL.has(t.path) ? "sel" : ""}" data-path="${esc(t.path)}">
+        ${SNAP ? "" : `<td class="cb"><input type="checkbox" data-sel ${SEL.has(t.path) ? "checked" : ""}></td>`}
+        <td>${colour(colourOf(t), !t.traktor_color)}${t.held_colour ? lock("Colour") : ""}</td><td>${trackName(t)}${t.type === "track" && !t.own_cues ? ` <span class="chip" data-tip="${t.own_cues === 0 ? "No cue points or loops of yours in Traktor" : "Not in Traktor's collection (or no beat grid)"}">no cues</span>` : ""}</td>
+        <td class="r num" ${t.source_bpm ? `data-tip="own tempo ${Math.round(t.source_bpm)} BPM"` : ""}>${fmt(t.mix_bpm)}</td>
+        <td ${t.traktor_camelot && t.camelot && t.traktor_camelot !== t.camelot ? `data-tip="Traktor ${esc(t.traktor_camelot)}, ours ${esc(t.camelot)}"` : ""}>${esc(t.mix_camelot || "–")}${t.traktor_camelot && t.camelot && t.traktor_camelot !== t.camelot ? ` <span class="dim small">(${esc(t.camelot)})</span>` : ""}</td>
+        <td>${esc(t.my_genre || t.genre || "–")}${t.held_genre ? lock("Genre") : ""}${t.genre_2 ? `<div class="dim small">${esc(t.genre_2)}</div>` : ""}${t.error && !t.error.startsWith("tags:") ? `<div class="chip bad" data-tip="${esc(t.error)}">error</div>` : ""}</td>
+        <td class="r">${hypeBadge(t.hype)}</td>
+        <td class="r num" data-tip="${t.own_cues ? `${t.own_cues} cues of yours` : "none of yours"}${t.corrections ? ` · ${t.corrections} proposed correction${t.corrections > 1 ? "s" : ""}` : ""}${t.cues_approved ? " · approved, not written yet" : ""}">${t.own_cues ?? "–"}${t.corrections ? ` <span class="chip warn">${t.corrections} fix${t.corrections > 1 ? "es" : ""}</span>` : ""}${t.cues_approved ? ` <span class="chip good">approved</span>` : ""}${S.fixesPending && t.own_cues ? ` <span class="dim small">counting…</span>` : ""}</td>
+        <td class="r num">${fmt(t.lufs, 1)}</td><td class="r num">${mmss(t.duration_sec)}</td></tr>`).join("")}</tbody></table></div>`;
+    $("#ttable .tablewrap").scrollTop = scroll;
+    $("#ttable thead").onclick = e => { const k = e.target.dataset?.k; if (!k) return; S.trackSort = { key: k, dir: S.trackSort.key === k ? -S.trackSort.dir : 1 }; draw(); };
+    $("#ttable tbody").onclick = e => {
+      const tr = e.target.closest("tr[data-path]"); if (!tr) return;
+      if (e.target.closest(".cb")) {  // the checkbox cell selects instead of opening
+        const p = tr.dataset.path; SEL.has(p) ? SEL.delete(p) : SEL.add(p); draw(); return;
+      }
+      openTrack(tr.dataset.path);
+    };
+    const all_ = $("#selall");
+    if (all_) all_.onchange = () => { shown.forEach(t => all_.checked ? SEL.add(t.path) : SEL.delete(t.path)); draw(); };
+    selbar();
+  }
+  S.redrawTracks = draw;
+  S.reloadTracks = async () => { delete S.tracks[S.lib]; all = await getTracks(); draw(); };
+  draw();
+  if (open) openTrack(open);
+}
+
+// ---------- track drawer ----------
+function closeDrawer() { deckStopLoop(); DECK.audio.pause(); $("#drawer").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true"); }
+addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+function scaleView(t) {
+  const pos = t.color_position, yours = t.traktor_color ? COLOURS.indexOf(t.traktor_color) + 1 : null;
+  const at = p => `left:${(p - 0.5) / 7 * 100}%`;
+  return `<div class="scale-marks top">${yours ? `<div class="m" style="${at(yours)}">yours</div>` : ""}</div>
+    <div class="scale">${COLOURS.map(c => `<div class="sw-${c}" data-tip="${c}"></div>`).join("")}</div>
+    <div class="scale-marks">${pos != null ? `<div class="m" style="${at(pos)}" data-tip="where the model places this track (1 = Red … 7 = Magenta)">model ${pos.toFixed(2)}</div>` : ""}</div>`;
+}
+async function openTrack(path) {
+  if (DECK.path && DECK.path !== path) { deckStopLoop(); DECK.audio.pause(); }
+  const all = await getTracks(), t = all.find(x => x.path === path);
+  if (!t) return;
+  const d = $("#drawer"), body = $("#drawer-body");
+  const moods = ["aggressive", "happy", "party", "relaxed", "sad"].filter(m => t["mood_" + m] != null).map(m => ({ label: m, value: t["mood_" + m] }));
+  const genreScores = [[t.genre, t.genre_score], [t.genre_2, t.genre_2_score], [t.genre_3, t.genre_3_score]].filter(g => g[0]).map(([g, s]) => ({ label: g, value: s }));
+  body.innerHTML = `
+    <h2 style="padding-right:40px">${esc(t.title || t.filename)}</h2><div class="muted">${esc(t.artist || "")}</div>
+    <dl class="facts">
+      <dt>BPM</dt><dd>${fmt(t.mix_bpm)}${t.traktor_bpm != null ? ` <span class="dim small">Traktor ${fmt(Math.round(t.traktor_bpm))} · ours ${fmt(t.bpm != null ? Math.round(t.bpm) : null)}</span>` : ""}${t.source_bpm ? ` <span class="dim small">· own tempo ${Math.round(t.source_bpm)}</span>` : ""}</dd>
+      <dt>Key</dt><dd>${esc(t.mix_camelot || "–")} <span class="dim small">${t.traktor_camelot ? `Traktor ${esc(t.traktor_camelot)} · ` : ""}ours ${esc(t.camelot || "–")} (${esc(t.key || "–")})</span></dd>
+      <dt>Colour</dt><dd>${colour(colourOf(t), !t.traktor_color)}${t.traktor_color && t.color ? ` <span class="dim small">model: ${esc(t.color)}${t.color_confidence != null ? `, confidence ${pct(t.color_confidence)}` : ""}</span>` : ""}${t.kept ? ` <span class="chip">kept always</span>` : ""}</dd>
+      <dt>Hype</dt><dd>${hypeBadge(t.hype)} <span class="dim small">1-10 within your collection</span></dd>
+      <dt>Loudness</dt><dd>${fmt(t.lufs, 1)} LUFS · range ${fmt(t.loudness_range, 1)} LU</dd>
+      <dt>Length</dt><dd>${mmss(t.duration_sec)}</dd>
+      ${t.my_genre ? `<dt>Your genre</dt><dd>${esc(t.my_genre)} <span class="dim small">${pct(t.my_genre_confidence)}</span></dd>` : ""}
+      ${t.tag_genre ? `<dt>Genre tag</dt><dd>${esc(t.tag_genre)}</dd>` : ""}
+      ${t.album ? `<dt>Album</dt><dd>${esc(t.album)}</dd>` : ""}
+      <dt>File</dt><dd class="mono" style="word-break:break-all">${esc(t.path)}</dd>
+      ${t.error ? `<dt>Note</dt><dd class="small">${esc(t.error)}</dd>` : ""}
+    </dl>
+    ${t.type === "track" ? `<div class="section"><h3>Hold</h3><div class="holds">
+      ${["genre", "colour"].map(k => `<span>${k === "genre" ? "Genre" : "Colour"}</span><span>${SNAP ? (t["held_" + k] ? `${LOCK} held` : `<span class="dim">not held</span>`)
+        : `<button data-hold="${k}" class="${t["held_" + k] ? "on" : ""}">${t["held_" + k] ? `${LOCK} Held · release` : "Hold"}</button>`}</span>`).join("")}</div>
+      <div class="note">A held genre or colour stays as it is in your files, Traktor and Lexicon: <span class="mono">tag</span>, <span class="mono">traktor</span>,
+      <span class="mono">colors review --apply</span> and <span class="mono">tempo load</span> skip it. Holding only changes the analyzer's list; nothing is written now.</div></div>` : ""}
+    ${pos(t)}
+    ${genreScores.length ? `<div class="section"><h3>Genres</h3>${bars(genreScores, { max: Math.max(...genreScores.map(g => g.value || 0), 0.01) })}</div>` : ""}
+    ${t.styles ? `<div class="section"><h3>Discogs styles</h3>${bars(parseScores(t.styles))}</div>` : ""}
+    ${moods.length ? `<div class="section"><h3>Mood</h3>${bars(moods, { max: 1, fmtVal: v => pct(v) })}</div>` : ""}
+    ${t.instruments ? `<div class="section"><h3>Instruments <span class="dim small">(compare tracks, not absolute)</span></h3>${bars(parseScores(t.instruments), { max: 1 })}</div>` : ""}
+    ${t.type === "track" ? `<div class="section"><h3>Cues and phrases</h3><div id="cuebox" class="loading">Loading…</div></div>` : ""}
+    ${t.type === "track" ? `<div class="section"><h3>Mixes well with</h3><div class="filters small"><label class="inline"><input type="checkbox" id="sg-same" checked ${SNAP ? "disabled" : ""}> same genre</label>
+      <label class="inline">BPM ± <input type="number" id="sg-tol" value="4" style="width:56px" ${SNAP ? "disabled" : ""}>%</label></div><div id="sugg" class="loading">Loading…</div></div>` : ""}`;
+  function pos(t) { return t.color_position != null || t.traktor_color ? `<div class="section"><h3>Colour scale <span class="dim small">Red = hardest … Magenta = prettiest</span></h3>${scaleView(t)}</div>` : ""; }
+  body.querySelectorAll("[data-hold]").forEach(b => b.onclick = async () => {
+    const k = b.dataset.hold;
+    try { await hold([t.path], k, !t["held_" + k]); const top = d.scrollTop; await openTrack(t.path); d.scrollTop = top; S.page === "tracks" && S.redrawTracks?.(); }
+    catch (e) { b.textContent = e.message; }
+  });
+  const keepScroll = d.classList.contains("open") && d.dataset.path === t.path;
+  d.dataset.path = t.path;
+  d.classList.add("open"); d.setAttribute("aria-hidden", "false"); if (!keepScroll) d.scrollTop = 0;
+  if (t.type !== "track") return;
+  api("cues", { path: t.path }).then(c => { const b = $("#cuebox"); if (b && d.dataset.path === t.path) { b.className = ""; b.innerHTML = renderCues(c); drawWave(c, b); if (!SNAP) { bindApprove(c, b, t); deckAttach(c, b); } } })
+    .catch(e => { const b = $("#cuebox"); if (b) { b.className = ""; b.innerHTML = `<div class="dim small">${esc(e.message)}</div>`; } });
+  const load = async () => {
+    const box = $("#sugg");
+    try {
+      const r = await api("suggest", { lib: S.lib, path: t.path, same_genre: $("#sg-same").checked ? 1 : 0, tolerance: $("#sg-tol").value });
+      box.className = "";
+      box.innerHTML = `<div class="dim small" style="margin-bottom:6px">${esc(r.rule)} · ${r.matches} matches</div>` + table([
+        { h: "", f: s => sw(s.traktor_color || s.color, !s.traktor_color) }, { h: "Track", f: trackName },
+        { h: "BPM", r: 1, f: s => fmt(s.bpm) }, { h: "Key", f: s => esc(s.camelot || "–") }, { h: "Genre", f: s => esc(s.genre || "–") },
+      ], r.tracks, { rowAttr: s => `class="click" data-path="${esc(s.path)}"` });
+      box.onclick = e => { const tr = e.target.closest("tr[data-path]"); if (tr) openTrack(tr.dataset.path); };
+    } catch (e) { box.className = ""; box.innerHTML = errBox(e); }
+  };
+  $("#sg-same").onchange = load; $("#sg-tol").onchange = load; load();
+}
+
+function renderCues(c) {
+  if (!c.bars) return `<div class="dim small">${esc(c.note || "No suggestions yet.")}</div>` + ((c.yours || []).length ? cueTable(c, []) : "");
+  if (!c.wave) return `<div class="dim small">No waveform for this track yet: run <span class="mono">cues scan</span>.</div>` + cueTable(c, c.cues);
+  const deck = SNAP ? "" : `<div class="deck"><button class="primary" id="dk-play" style="min-width:84px">▶ Play</button><span class="time" id="dk-time">0:00.0</span>
+      <label class="inline small"><input type="checkbox" id="dk-follow" checked> follow when zoomed</label>
+      <button id="dk-rescan" data-tip="Measure this track's audio again and re-read its beat grid and cues from Traktor (Traktor saves them when it quits)">Rescan track</button>
+      <span class="small dim">Space play/pause · 1–8 your cues · ←/→ 1 bar · shift+←/→ 8 bars · click the waveform to jump</span></div>
+    <div class="pads"><span class="small muted">${c.approved_view ? "Yours, with approved:" : "Yours:"}</span>${myCues(c).slice().sort((a, b) => (a.hotcue < 0) - (b.hotcue < 0) || a.hotcue - b.hotcue || a.ms - b.ms)
+      .map(y => `<button class="mine${y.status === "new" ? " new" : ""}" data-t="${y.ms / 1000}" ${y.type === "loop" && y.bars ? `data-loop="${y.bars * c.bar_seconds}"` : ""} data-tip="${y.status === "new" ? `Approved ${esc(y.name || y.type)}, not written yet` : y.status === "moved" ? "Your cue, approved to move here, not written yet" : "Your " + y.type}${y.hotcue >= 0 ? " · slot " + (y.hotcue + 1) : ""} · ${barLabel(c, Math.round((y.ms / 1000 - c.first_bar_s) / c.bar_seconds)).text}${y.type === "loop" ? " (plays looped)" : ""}">${y.hotcue >= 0 ? y.hotcue + 1 : y.type === "loop" ? "L" : "•"}${y.status === "moved" ? "→" : ""}</button>`).join("") || `<span class="dim small">none</span>`}
+      <span class="small muted" style="margin-left:8px">Suggested:</span>${c.cues.filter(q => !sugHidden(c, q)).map(q => `<button class="sug" data-t="${q.ms / 1000}">${esc(q.name)} · ${barLabel(c, q.bar).n}</button>`).join("")}
+      </div>${(c.loop_ideas || []).length ? `<div class="pads"><span class="small muted">Loop ideas:</span>${c.loop_ideas.map((l, k) =>
+        `<button class="lp" data-t="${l.ms / 1000}" data-loop="${l.len_ms / 1000}" data-tip="L${k + 1}: ${esc(l.kind)} · ${l.bars} bars from bar ${barLabel(c, l.bar).n} · ${esc(l.why)}. Plays looped, gapless.">L${k + 1} · ${esc(l.kind.split(" · ")[0])} · ${barLabel(c, l.bar).n}</button>`).join("")}</div>` : ""}`;
+  return `${deck}<div class="filters" style="margin:0 0 6px"><button data-zoom="in" data-tip="Zoom in (or pinch / ctrl+scroll on the waveform, double-click)">+</button><button data-zoom="out" data-tip="Zoom out (shift+double-click)">−</button><button data-zoom="fit">Fit</button>
+    <span class="small muted" id="wavezoom"></span><span class="small dim">drag or scroll sideways to move</span></div>
+    <div class="wavewrap"><div class="wavehl" id="wavehl"></div><div class="playhead" id="ph"></div><div class="playhead ov" id="phov"></div><canvas id="wave" aria-label="Waveform with your cues (white, top) and suggested cues (blue, bottom)"></canvas></div>
+    <div class="legend"><span><i style="background:#fff"></i>your cues (numbered, top)</span><span><i style="background:#6fb4ff"></i>suggested (named, bottom)</span>
+    <span><i style="background:#f08a24;opacity:.6"></i>loop ideas (L1 = most like yours)</span>${(c.corrections || []).some(f => !fixSettled(c, f)) ? `<span><i style="background:#ffd23f"></i>proposed correction</span>` : ""}<span>colour: <b style="color:#ff5a4f">lows</b> · <b style="color:#5fe36b">mids</b> · <b style="color:#5aa8ff">highs</b> · grid: beat, bar, every 4 bars, 8-bar phrase, 32 bars</span></div>
+    ${SNAP ? cueTable(c, c.cues) : approveBox(c)}<div class="note">Suggestions are learned from the cues you set yourself (trained ${esc(c.trained_at || "")}).</div>`;
+}
+// your cues as they'll be in Traktor: with an approval, moved ones at their new place and new ones in their slot
+const myCues = c => c.approved_view ? c.approved_view.cues : (c.yours || []).map(y => ({ ...y, status: "yours" }));
+const isApprovedAdd = (c, ms) => !!c.approved_view && c.approved_view.cues.some(y => y.status === "new" && Math.abs(y.ms - ms) < 1);
+const isApprovedMove = (c, f) => !!c.approved_view && c.approved_view.cues.some(y => y.status === "moved" && y.hotcue === f.hotcue && Math.abs(y.from_ms - f.from_ms) < 1);
+const sameFix = (f, g) => f.hotcue === g.hotcue && Math.abs(f.from_ms - g.from_ms) < 1 && Math.abs(f.to_ms - g.to_ms) < 1;
+const fixSettled = (c, f) => f.ignored || isApprovedMove(c, f);  // approved or ignored: no longer a pending correction
+const sugHidden = (c, q) => isApprovedAdd(c, q.ms) || (q.moves != null && (c.corrections || []).some(f => f.hotcue === q.moves && Math.abs(f.to_ms - q.ms) < 1 && fixSettled(c, f)));
+function barLabel(c, bar) {  // bar: index into the track's bars; bar 1 = Traktor's grid marker
+  const n = bar - c.grid_bar + 1, ph = Math.floor((n - 1) / 8) + 1, inph = ((n - 1) % 8 + 8) % 8 + 1;
+  return { n, text: `bar ${n}`, phrase: n < 1 ? "before the grid marker" : inph === 1 ? `first bar of phrase ${ph} (8-bar grid)` : `bar ${inph} of phrase ${ph}` };
+}
+function approveItems(c) {
+  const items = [];
+  c.cues.forEach(q => {
+    if (q.moves != null) return;  // offered below as a correction of your cue
+    const note = q.matches != null ? `✓ matches your cue ${q.matches + 1}` : q.at_your_loop ? "your loop is here" : "";
+    items.push({ key: "a" + q.ms, kind: "add", label: `${q.time} · bar ${barLabel(c, q.bar).n} · <b>${esc(q.name)}</b>`, disabled: note, data: { ms: q.ms, name: q.name, type: "cue", len_ms: 0 } });
+  });
+  (c.loop_ideas || []).forEach((l, k) => items.push({ key: "l" + l.ms, kind: "add",
+    label: `${l.time} · bar ${barLabel(c, l.bar).n} · <b>Loop ${l.bars} bars</b> <span class="dim small">L${k + 1} · ${esc(l.kind)} · ${esc(l.why)}${k === 0 ? " · slot 8 when free" : ""}</span>`,
+    sample: { bar: barLabel(c, l.bar).n, kind: `L${k + 1} ${l.kind.split(" · ")[0]}` },
+    data: { ms: l.ms, name: `Loop ${l.bars}`, type: "loop", len_ms: l.len_ms } }));
+  (c.corrections || []).forEach(f => items.push({ key: `m${f.hotcue}:${f.from_ms}`, kind: "move", fix: f, ignored: !!f.ignored,
+    label: `<span class="move">Cue ${f.hotcue + 1}: ${f.from_bar === f.to_bar ? `onto the downbeat of bar ${f.to_bar}` : `bar ${f.from_bar} → bar ${f.to_bar}`}</span>
+      <span class="small">${f.from_bar === f.to_bar ? "" : ` · ${Math.abs(f.to_bar - f.from_bar)} bar${Math.abs(f.to_bar - f.from_bar) > 1 ? "s" : ""} ${f.to_bar > f.from_bar ? "later" : "earlier"}`} · ${f.to_time}</span>
+      ${f.phrase_grid ? ` <span class="chip good">on the 8-bar phrase grid</span>` : ""}
+      <div class="why">Scores ${f.score_here} at your spot, ${f.score_there} there${f.suggested_as ? ` · the model also suggests ${esc(f.suggested_as)} there` : ""}. Listen to both before ticking: some off-grid cues are on purpose.</div>`,
+    tip: `The model (which never saw your cues on this track) scores bar ${f.to_bar} ${f.score_there} and your spot ${f.score_here}. About half of your off-grid cues are on purpose, so only tick it if it was a slip.`,
+    data: { from_ms: f.from_ms, to_ms: f.to_ms, hotcue: f.hotcue, name: f.name } }));
+  return items;
+}
+function approveBox(c) {
+  const items = approveItems(c), ap = c.approved;
+  const isOn = it => !!ap && (it.kind === "add" ? ap.add.some(a => Math.abs(a.ms - it.data.ms) < 1) : ap.move.some(m => m.hotcue === it.data.hotcue && Math.abs(m.from_ms - it.data.from_ms) < 1));
+  if (!items.length) return cueTable(c, c.cues);
+  const approvedOk = it => isOn(it) && !(ap && ap.grid_changed) && !(c.approved_view?.skipped_ms || []).some(m => Math.abs(m - (it.kind === "move" ? it.data.from_ms : it.data.ms)) < 1);
+  const approved = items.filter(approvedOk), pending = items.filter(it => !approvedOk(it));
+  const fixes = pending.filter(i => i.kind === "move" && !i.ignored), ignoredFixes = pending.filter(i => i.kind === "move" && i.ignored),
+    cues_ = pending.filter(i => i.kind === "add" && i.data.type === "cue"),
+    loops = pending.filter(i => i.kind === "add" && i.data.type === "loop"), newCues = cues_.filter(i => !i.disabled).length;
+  const row = it => {
+    const dim = it.disabled && !it.disabled.startsWith("✓") ? "opacity:.5;" : "";
+    const tipAttr = it.tip ? `data-tip="${esc(it.tip)}"` : it.disabled ? `data-tip="${esc(it.disabled)}"` : "";
+    const play = it.kind === "move"
+      ? `<div style="margin-top:3px"><button class="mini" data-t="${it.data.from_ms / 1000}" data-tip="Play from your cue">▶ yours</button><button class="mini" data-t="${it.data.to_ms / 1000}" data-tip="Play from the proposed bar">▶ proposed</button></div>`
+      : `<button class="mini" data-t="${it.data.ms / 1000}" ${it.data.type === "loop" ? `data-loop="${it.data.len_ms / 1000}"` : ""} data-tip="Play from here">▶</button>`;
+    const had = it.sample && (c.saved_samples || []).find(x => Math.abs(x.start - it.data.ms / 1000) < 0.002 && Math.abs(x.len - it.data.len_ms / 1000) < 0.002 && !!x.smooth === smoothLoops());
+    const save = !it.sample || SNAP ? "" : had ? `<span class="small" style="color:var(--good)" data-saved="${esc(it.key)}"> ✓ saved in ${esc(had.folder)} ${showBtn(had.file, c.file_manager)}</span>`
+      : `<button class="mini" type="button" data-save="${esc(it.key)}" data-tip="Save this loop as a WAV sample (exact samples, gapless) in the folder chosen above">Save sample</button><span class="small" style="color:var(--good)" data-saved="${esc(it.key)}"></span>`;
+    const ign = it.kind === "move" && !SNAP && !isOn(it) ? `<button class="mini" type="button" data-ignore="${esc(it.key)}" data-tip="${it.ignored ? "Show this correction again" : "Your cue is right: hide this correction (it comes back only if the cue moves)"}">${it.ignored ? "Restore" : "Ignore"}</button>` : "";
+    const note = it.disabled ? ` <span class="small" style="color:${it.disabled.startsWith("✓") ? "var(--good)" : "var(--text-3)"}">· ${esc(it.disabled)}</span>` : "";
+    const from = it.kind === "move" ? it.data.from_ms : it.data.ms;
+    const left = isOn(it) && (c.approved_view?.skipped_ms || []).some(m => Math.abs(m - from) < 1);  // approved but won't fit
+    const done = isOn(it) && !(ap && ap.grid_changed) && !left;
+    return `<label class="${it.kind === "move" ? "fix" : "inline"}${done ? " approved" : ""}" style="${it.kind === "move" ? "" : "display:flex;margin:3px 0;"}${dim}" ${tipAttr}>
+      <input type="checkbox" data-key="${esc(it.key)}" ${isOn(it) ? "checked" : ""} ${it.disabled ? "disabled" : ""}> <span>${done ? `<span class="chip good" style="margin-right:6px">✓ approved</span>` : left ? `<span class="chip warn" style="margin-right:6px" data-tip="Approved, but it won't be written: see the note above">won't fit</span>` : ""}${it.label}${play}${save}${ign}${note}</span></label>`;
+  };
+  const summary = [fixes.length && `<b style="color:#c99700">${fixes.length} correction${fixes.length > 1 ? "s" : ""} to your cues</b>`,
+    `${newCues} new cue${newCues === 1 ? "" : "s"}`, loops.length && `${loops.length} loop idea${loops.length > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+  return `<div class="section" style="margin-top:12px"><h3>Approve for Traktor</h3>
+    ${ap ? `<div class="note" style="margin:0 0 6px"><b style="color:var(--good)">✓ ${ap.add.length + ap.move.length} approved</b> ${esc(ap.at)}${ap.grid_changed ? ` · <b>the beat grid changed since: approve again</b>` : " · shown above as your cues (green = new, → = moved)"}. Not in Traktor yet: press <b>Write to Traktor…</b> below (Traktor closed).${(c.approved_view?.skipped || []).length ? `<br>Won't be written: ${c.approved_view.skipped.map(esc).join("; ")}` : ""}</div>` : ""}
+    <div class="small muted">${summary}</div>
+    <div id="approve">
+      ${approved.length ? `<div class="apgroup"><h4 style="color:var(--good)">✓ Approved · not in Traktor yet <span class="small muted" style="font-weight:400">· untick and press Approve ticked to take one back</span></h4>${approved.map(row).join("")}</div>` : ""}
+      ${fixes.length ? `<div class="apgroup"><h4>Corrections to your cues <button class="mini" id="ap-fixall" type="button">Tick all corrections</button></h4><div class="fixbox">${fixes.map(row).join("")}</div></div>` : ""}
+      ${ignoredFixes.length ? `<details class="apgroup"><summary class="small muted">${ignoredFixes.length} ignored correction${ignoredFixes.length > 1 ? "s" : ""} · show</summary>${ignoredFixes.map(row).join("")}</details>` : ""}
+      ${cues_.length ? `<div class="apgroup"><h4>New cues <span class="small muted" style="font-weight:400">· ${c.free_slots > 0 ? `${c.free_slots} free hot-cue slot${c.free_slots > 1 ? "s" : ""}` : `<b style="color:var(--warn)">all 8 hot-cue slots are used</b>: free one in Traktor first, or use a correction to move a cue`}</span></h4>${cues_.map(row).join("")}</div>` : ""}
+      ${loops.length ? `<div class="apgroup"><h4>Loops ${SNAP ? "" : `<span class="small muted" style="font-weight:400">· save as WAV sample to <select id="smp-folder" style="font-size:12px;padding:1px 4px"></select> <button class="mini" type="button" id="smp-open" data-tip="Open this folder">Open folder</button></span>`}
+        <label class="inline small" style="font-weight:400;margin-left:8px" data-tip="Fade the loop's last 5 ms into the audio just before its start, so a sound ringing over the end isn't cut off with a click. Changes the loop pads and saved samples; off = the track's exact samples"><input type="checkbox" id="smooth-loops" ${smoothLoops() ? "checked" : ""}> smooth loop point</label></h4>${loops.map(row).join("")}</div>` : ""}
+    </div>
+    <div class="filters" style="margin-top:8px"><button class="primary" id="ap-save">Approve ticked</button><button id="ap-all">Tick all new cues</button>
+      ${ap ? `<button id="ap-clear">Clear approval</button>` : ""}${SNAP ? "" : `<button id="ap-write" data-tip="Write every approved track's cues into Traktor (shows what changes first)">Write to Traktor…</button>`}<span class="small muted" id="ap-msg"></span></div>
+    <div class="note">Approving writes nothing yet. <b>Write to Traktor…</b> writes all approved tracks at once, with Traktor closed: it shows what would change first, makes a backup and can be undone
+      (same as <span class="mono">cues apply</span> in Terminal). New cues only go into free hot-cue slots; your own cues are only moved when you ticked a correction.</div></div>
+    ${cueTable(c, c.cues)}`;
+}
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json(); if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+}
+// Write every approval into Traktor's collection.nml (= `cues apply`): a preview first, then the write, then Undo.
+async function writeToTraktor(onDone) {
+  const dlg = document.createElement("dialog"); dlg.className = "write"; document.body.appendChild(dlg);
+  dlg.addEventListener("close", () => dlg.remove());
+  const list = (items, max = 400) => items.length ? `<ul>${items.slice(0, max).map(x => `<li>${esc(x)}</li>`).join("")}${items.length > max ? `<li class="muted">… ${items.length - max} more</li>` : ""}</ul>` : "";
+  const show = (html, buttons) => {
+    dlg.innerHTML = `<h3>Write approved cues to Traktor</h3>${html}<div class="filters" style="margin-top:12px">${buttons}<button data-close>Close</button><span class="small muted" id="wr-msg"></span></div>`;
+    dlg.querySelector("[data-close]").onclick = () => dlg.close();
+  };
+  const fail = e => { const m = dlg.querySelector("#wr-msg"); if (m) m.textContent = e.message; else show(errBox(e), ""); };
+  async function preview() {
+    show(`<div class="muted">Checking what would change…</div>`, "");
+    let d; try { d = await postJSON("/api/cues/write", { dry_run: true }); } catch (e) { return show(`<div class="err">${esc(e.message)}</div>`, ""); }
+    const what = [d.cues_added && `<b>${d.cues_added}</b> new cue${d.cues_added > 1 ? "s" : ""}`, d.cues_moved && `<b>${d.cues_moved}</b> correction${d.cues_moved > 1 ? "s" : ""}`].filter(Boolean).join(" and ");
+    const running = d.traktor_running ? `<div class="err" style="margin:8px 0">Traktor is open. Quit Traktor first: it saves its collection when it closes and would undo these changes. Then press Check again.</div>` : "";
+    show(`${d.changed ? `<div>${what} on <b>${d.tracks}</b> track${d.tracks > 1 ? "s" : ""}:</div>${list(d.changes || [])}` : `<div>${d.nothing_approved ? "Nothing approved yet: tick cues in a track's panel and press Approve ticked." : "Nothing to write: everything approved is already in Traktor or can't be placed."}</div>`}
+      ${(d.skipped || []).length ? `<div class="small" style="margin-top:6px"><b>Won't be written</b> (approve these again after freeing a hot-cue slot in Traktor):</div>${list(d.skipped)}` : ""}
+      ${running}
+      <div class="note">A backup of collection.nml is made first; Undo here (or <span class="mono">traktor --undo</span>) puts it back. Your own cues are only moved where you approved a correction.</div>`,
+      d.changed ? (d.traktor_running ? `<button class="primary" data-check>Check again</button>` : `<button class="primary" data-write>Write to Traktor</button>`) : "");
+    dlg.querySelector("[data-check]")?.addEventListener("click", preview);
+    dlg.querySelector("[data-write]")?.addEventListener("click", async e => {
+      e.currentTarget.disabled = true; e.currentTarget.textContent = "Writing…";
+      let r; try { r = await postJSON("/api/cues/write", { dry_run: false }); } catch (err) { e.currentTarget.disabled = false; e.currentTarget.textContent = "Write to Traktor"; return fail(err); }
+      S.tracks = {};
+      show(`<div style="color:var(--good)"><b>✓ Written:</b> ${r.cues_added} new cue${r.cues_added === 1 ? "" : "s"}, ${r.cues_moved} correction${r.cues_moved === 1 ? "" : "s"} on ${r.tracks} track${r.tracks === 1 ? "" : "s"}.</div>
+        <div class="note">Open Traktor: the cues are there. Backup: <span class="mono">${esc(r.backup || "")}</span><br>Undo works until Traktor saves the collection again (it does when it quits).</div>`,
+        `<button data-undo>Undo</button>`);
+      dlg.querySelector("[data-undo]").onclick = async ev => {
+        ev.currentTarget.disabled = true;
+        try { const u = await postJSON("/api/cues/undo", {}); S.tracks = {};
+          show(`<div><b>Undone.</b> collection.nml is back to how it was${u.approvals_restored ? `, and your ${u.approvals_restored} approval${u.approvals_restored > 1 ? "s are" : " is"} back` : ""}.</div>`, "");
+          onDone?.(); }
+        catch (err) { ev.currentTarget.disabled = false; fail(err); }
+      };
+      onDone?.();
+    });
+  }
+  dlg.showModal();
+  preview();
+}
+function smoothLoops() {
+  if (S.smoothLoops === undefined) { try { S.smoothLoops = localStorage.getItem("ta-smooth-loop") === "1"; } catch (e) { S.smoothLoops = false; } }
+  return S.smoothLoops;
+}
+const showBtn = (file, fm) => `<button class="mini" type="button" data-reveal="${esc(file)}" data-tip="${esc(file)}">Show in ${esc(fm || "file manager")}</button>`;
+function bindApprove(c, box, t) {
+  const items = approveItems(c);
+  const send = postJSON;
+  const refresh = async (d, msgText) => {  // draw the panel again and update the track list's counts
+    for (const list of Object.values(S.tracks)) for (const x of list) if (x.path === t.path) {
+      if ("approved" in d) { if (d.approved) x.cues_approved = true; else delete x.cues_approved; }
+      if ("corrections" in d) { if (d.corrections) x.corrections = d.corrections; else delete x.corrections; }
+    }
+    const fresh = await api("cues", { path: t.path }); box.innerHTML = renderCues(fresh); drawWave(fresh, box); bindApprove(fresh, box, t); deckAttach(fresh, box);
+    const msg = box.querySelector("#ap-msg"); if (msg && msgText) msg.textContent = msgText;
+    if (S.page === "tracks") S.redrawTracks?.();
+  };
+  const save = async plan => { const d = await send("/api/cues/approve", { path: t.path, plan }); await refresh(d, d.approved ? `${d.approved} approved` : "Approval cleared"); };
+  box.querySelectorAll("[data-ignore]").forEach(b => b.addEventListener("click", async e => {
+    e.preventDefault(); e.stopPropagation();
+    const it = items.find(i => i.key === b.dataset.ignore);
+    try { const d = await send("/api/cues/ignore", { path: t.path, fix: it.fix, on: !it.ignored }); await refresh(d, it.ignored ? "Correction restored" : "Correction ignored"); }
+    catch (err) { b.textContent = err.message; }
+  }));
+  box.querySelector("#dk-rescan")?.addEventListener("click", async e => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = "Rescanning…";
+    try { const d = await send("/api/cues/rescan", { path: t.path }); box._view = null; WAVE_DETAIL.delete(t.path); await refresh(d, "Track rescanned"); }
+    catch (err) { b.disabled = false; b.textContent = err.message; }
+  });
+  const go = async plan => { try { await save(plan); } catch (e) { const m = box.querySelector("#ap-msg"); if (m) m.textContent = e.message; } };
+  const ticked = () => { const on = new Set([...box.querySelectorAll("#approve input:checked")].map(i => i.dataset.key)); const sel = items.filter(it => on.has(it.key));
+    return { add: sel.filter(i => i.kind === "add").map(i => i.data), move: sel.filter(i => i.kind === "move").map(i => i.data) }; };
+  box.querySelector("#ap-save")?.addEventListener("click", () => go(ticked()));
+  box.querySelector("#ap-write")?.addEventListener("click", () => writeToTraktor(async () => { S.tracks = {}; await refresh({}, ""); if (S.page === "tracks") S.reloadTracks?.(); }));
+  box.querySelector("#ap-all")?.addEventListener("click", () => box.querySelectorAll('#approve input[data-key^="a"]:not(:disabled)').forEach(i => { i.checked = true; }));
+  const sel = box.querySelector("#smp-folder");
+  if (sel) {
+    (S.sampleFolders ? Promise.resolve(S.sampleFolders) : api("samples/folders").then(f => (S.sampleFolders = f))).then(f => {
+      let last = null; try { last = localStorage.getItem("ta-sample-folder"); } catch (e) {}
+      sel.innerHTML = f.folders.map(n => `<option ${n === (f.folders.includes(last) ? last : f.default) ? "selected" : ""}>${esc(n)}</option>`).join("");
+      sel.title = f.root;
+    }).catch(() => {});
+    sel.addEventListener("change", () => { try { localStorage.setItem("ta-sample-folder", sel.value); } catch (e) {} });
+    box.querySelector("#smp-open")?.addEventListener("click", e => { e.preventDefault(); e.stopPropagation();
+      postJSON("/api/samples/reveal", { folder: sel.value }).catch(err => { e.target.textContent = err.message; }); });
+  }
+  box.querySelectorAll("[data-save]").forEach(b => b.addEventListener("click", async e => {
+    e.preventDefault(); e.stopPropagation();
+    const it = items.find(i => i.key === b.dataset.save), out = box.querySelector(`[data-saved="${CSS.escape(b.dataset.save)}"]`);
+    b.disabled = true; out.textContent = " saving…";
+    try {
+      const r = await fetch("/api/samples/save", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: t.path, start: it.data.ms / 1000, len: it.data.len_ms / 1000, folder: sel.value, bar: it.sample.bar, kind: it.sample.kind, smooth: smoothLoops() }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error || r.statusText);
+      out.innerHTML = ` ✓ ${d.already ? "already saved in" : "saved to"} ${esc(d.folder)} ${showBtn(d.saved, c.file_manager)}`;
+      b.remove();
+    } catch (err) { out.style.color = "var(--bad)"; out.textContent = ` ${err.message}`; }
+    finally { b.disabled = false; }
+  }));
+  if (!box._revealBound) {  // Show in Finder / Explorer (once per panel: bindApprove runs again after each change)
+    box._revealBound = true;
+    box.addEventListener("click", e => {
+      const b = e.target.closest("[data-reveal]"); if (!b) return;
+      e.preventDefault(); e.stopPropagation();
+      postJSON("/api/samples/reveal", { file: b.dataset.reveal }).catch(err => { b.textContent = err.message; });
+    });
+  }
+  box.querySelector("#smooth-loops")?.addEventListener("change", async e => {
+    S.smoothLoops = e.target.checked; try { localStorage.setItem("ta-smooth-loop", S.smoothLoops ? "1" : "0"); } catch (err) {}
+    if (DECK.src && DECK.loop) deckLoop(DECK.loop[0], DECK.loop[1]);  // hear the change straight away
+    await refresh({}, S.smoothLoops ? "Loop points smoothed" : "Exact loop points");
+  });
+  box.querySelector("#ap-fixall")?.addEventListener("click", e => { e.preventDefault(); box.querySelectorAll('#approve input[data-key^="m"]').forEach(i => { i.checked = true; }); });
+  box.querySelector("#ap-clear")?.addEventListener("click", () => go(null));
+}
+// ---------- deck: play the track and jump around like on a Traktor deck ----------
+const DECK = { audio: new Audio(), path: null, c: null, box: null, loop: null, raf: 0, loaded: false,
+  ctx: null, buf: null, bufPath: null, src: null, wa: null };  // Web Audio, for gapless loops
+DECK.audio.preload = "none";
+function deckAttach(c, box) {
+  if (DECK.path !== c.path) { deckStopLoop(); DECK.audio.pause(); DECK.audio.removeAttribute("src"); DECK.audio.load(); DECK.path = c.path; DECK.loop = null; DECK.loaded = false; DECK.preparing = false; DECK.buf = null; DECK.bufPath = null; }
+  DECK.c = c; DECK.box = box;
+  box.querySelector("#dk-play")?.addEventListener("click", deckToggle);
+  if (box._deckBound) { deckUi(); return; }
+  box._deckBound = true;
+  box.addEventListener("click", e => {  // pads and ▶ buttons: jump there and play (a loop plays looped)
+    const b = e.target.closest("[data-t]"); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const t = +b.dataset.t, len = b.dataset.loop ? +b.dataset.loop : 0, id = `${t}|${len}`;
+    if (b.classList.contains("mini") && DECK.active === id && deckPlaying()) {  // its ⏸: stop
+      if (DECK.src) { const at = deckStopLoop(); deckSrc(); DECK.audio.currentTime = at; } else DECK.audio.pause();
+      DECK.active = null; deckUi(); return;
+    }
+    deckSeek(t, true, len ? [t, t + len] : null);
+    DECK.active = id; deckUi();
+  });
+  deckUi();
+}
+function deckSrc() {  // the file loads only once you play or jump: opening a track loads nothing
+  if (!DECK.loaded && DECK.path) {
+    DECK.audio.preload = "auto"; DECK.audio.src = `/api/audio?path=${encodeURIComponent(DECK.path)}`; DECK.loaded = true;
+    DECK.preparing = true; deckMsg("Preparing audio… (the first time for a track takes a few seconds)");
+  }
+}
+function deckTime() {  // where playback is now, looping or not
+  if (DECK.src) { const len = DECK.wa.b - DECK.wa.a; return DECK.wa.a + ((DECK.ctx.currentTime - DECK.wa.t0) % len); }
+  return DECK.audio.currentTime || 0;
+}
+const deckPlaying = () => !!DECK.src || !DECK.audio.paused;
+function deckStopLoop() {
+  if (!DECK.src) return null;
+  const t = deckTime();
+  try { DECK.src.stop(); } catch (e) {}
+  DECK.src.disconnect(); DECK.src = null; DECK.wa = null; DECK.loop = null;
+  return t;
+}
+const LOOP_CLIPS = new Map();  // "path|start|length" -> decoded loop, the last few played
+async function deckLoop(a, b) {
+  // The <audio> element can only jump back once per screen refresh, which leaves a gap. Web Audio loops on the
+  // exact sample: the server cuts just the loop out of the file (~0.15 s), and it plays over and over.
+  DECK.audio.pause(); deckStopLoop();
+  DECK.loop = [a, b];
+  const smooth = smoothLoops(), want = DECK.path, key = `${want}|${a}|${b}|${smooth}`;
+  try {
+    DECK.ctx = DECK.ctx || new AudioContext();
+    if (DECK.ctx.state === "suspended") await DECK.ctx.resume();
+    let buf = LOOP_CLIPS.get(key), whole = false;
+    if (!buf) {
+      try {
+        const r = await fetch(`/api/loop?path=${encodeURIComponent(want)}&start=${a}&len=${b - a}${smooth ? "&smooth=1" : ""}`);
+        if (!r.ok) throw new Error((await r.json()).error);
+        buf = await DECK.ctx.decodeAudioData(await r.arrayBuffer());
+        LOOP_CLIPS.set(key, buf);
+        if (LOOP_CLIPS.size > 12) LOOP_CLIPS.delete(LOOP_CLIPS.keys().next().value);
+      } catch (e) {  // no ffmpeg or a cut that failed: decode the whole track instead (slower, same loop)
+        deckMsg("Preparing a gapless loop…");
+        if (DECK.bufPath !== want) {
+          const data = await (await fetch(`/api/audio?path=${encodeURIComponent(want)}`)).arrayBuffer();
+          DECK.buf = await DECK.ctx.decodeAudioData(data); DECK.bufPath = want;
+        }
+        buf = DECK.buf; whole = true;
+      }
+    }
+    if (DECK.path !== want || !DECK.loop || DECK.loop[0] !== a) return;  // another jump or track meanwhile
+    const src = DECK.ctx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    if (whole) { src.loopStart = a; src.loopEnd = b; src.connect(DECK.ctx.destination); src.start(0, a); }
+    else { src.connect(DECK.ctx.destination); src.start(0, 0); }  // the clip is exactly the loop
+    DECK.src = src; DECK.wa = { t0: DECK.ctx.currentTime, a, b };
+    deckTick();
+  } catch (err) { DECK.loop = null; deckMsg(`Couldn't loop: ${err.message}`); }
+}
+function deckSeek(t, play = true, loop = null) {
+  if (!DECK.path) return;
+  DECK.active = null;
+  if (loop) { deckLoop(loop[0], loop[1]); return; }
+  deckStopLoop();
+  deckSrc(); DECK.loop = null;
+  const go = () => { DECK.audio.currentTime = Math.max(0, t); if (play) DECK.audio.play().catch(err => deckMsg(err.message)); deckTick(); };
+  if (DECK.audio.readyState >= 1) go(); else DECK.audio.addEventListener("loadedmetadata", go, { once: true });
+}
+function deckToggle() {
+  if (!DECK.path) return;
+  if (DECK.src) { const t = deckStopLoop(); deckSrc(); DECK.audio.currentTime = t; deckUi(); return; }  // pause leaves the loop
+  deckSrc();
+  if (DECK.audio.paused) DECK.audio.play().catch(err => deckMsg(err.message)); else DECK.audio.pause();
+}
+function deckMsg(m) { const el = DECK.box?.querySelector("#dk-time"); if (el) el.textContent = m; }
+function deckTick() {
+  cancelAnimationFrame(DECK.raf);
+  const step = () => { deckUi(); if (deckPlaying()) DECK.raf = requestAnimationFrame(step); };
+  step();
+}
+DECK.audio.addEventListener("play", deckTick);
+DECK.audio.addEventListener("pause", () => deckUi());
+DECK.audio.addEventListener("canplay", () => { if (DECK.preparing) { DECK.preparing = false; deckUi(); } });
+DECK.audio.addEventListener("ended", () => { DECK.active = null; deckUi(); });
+DECK.audio.addEventListener("error", () => { DECK.preparing = false; if (DECK.loaded) deckMsg("This browser can't play this file"); });
+function deckUi() {
+  const c = DECK.c, box = DECK.box;
+  if (!c || !box || !box.isConnected) return;
+  const t = deckTime();
+  const btn = box.querySelector("#dk-play"); if (btn) btn.textContent = deckPlaying() ? "⏸ Pause" : "▶ Play";
+  const bi = Math.floor((t - c.first_bar_s + 1e-6) / c.bar_seconds), bl = barLabel(c, bi), bt = Math.floor((t - c.first_bar_s - bi * c.bar_seconds) / (c.bar_seconds / 4) + 1e-6) + 1;
+  const tm = box.querySelector("#dk-time");
+  if (tm && !DECK.preparing && (DECK.loaded || DECK.src || t > 0) && !(DECK.loop && !DECK.src)) tm.textContent = `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")} · ${bl.n >= 1 ? `bar ${bl.n}, beat ${bt}` : "before bar 1"}${DECK.loop ? " · looping" : ""}`;
+  box.querySelectorAll("button.mini[data-t]").forEach(b => {
+    b.dataset.label ??= b.textContent;
+    const on = deckPlaying() && DECK.active === `${+b.dataset.t}|${b.dataset.loop ? +b.dataset.loop : 0}`;
+    const txt = on ? b.dataset.label.replace("▶", "⏸") : b.dataset.label;
+    if (b.textContent !== txt) b.textContent = txt;
+    b.classList.toggle("on", on);
+  });
+  box.querySelectorAll(".pads [data-loop]").forEach(b => b.classList.toggle("on", !!DECK.loop && Math.abs(+b.dataset.t - DECK.loop[0]) < 0.01));
+  const w = box._wave, ph = box.querySelector("#ph"), pho = box.querySelector("#phov");
+  if (!w || !ph) return;
+  if (!DECK.loaded && !DECK.src && t === 0) { ph.style.display = pho.style.display = "none"; return; }
+  const W = w.W(), span = w.st.v1 - w.st.v0;
+  if (deckPlaying() && box.querySelector("#dk-follow")?.checked && w.zoomed() && (t < w.st.v0 || t > w.st.v0 + span * 0.85)) w.setView(t - span * 0.15, t + span * 0.85);
+  const x = w.X(t);
+  ph.style.display = x >= 0 && x <= W ? "block" : "none"; ph.style.left = x + "px";
+  pho.style.display = "block"; pho.style.left = (t / w.dur * W) + "px";
+}
+document.addEventListener("keydown", e => {
+  if (!DECK.path || !$("#drawer").classList.contains("open") || e.target.closest("input, textarea, select")) return;
+  const c = DECK.c, t = deckTime();
+  if (e.code === "Space") { e.preventDefault(); deckToggle(); }
+  else if (/^Digit[1-8]$/.test(e.code)) {
+    const y = myCues(c).find(y => y.hotcue === +e.code.slice(5) - 1);
+    if (y) { e.preventDefault(); deckSeek(y.ms / 1000, true, y.type === "loop" && y.bars ? [y.ms / 1000, y.ms / 1000 + y.bars * c.bar_seconds] : null); }
+  } else if (e.code === "ArrowLeft" || e.code === "ArrowRight") {
+    e.preventDefault();
+    const d = (e.code === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 8 : 1) * c.bar_seconds;
+    deckSeek(Math.max(0, t + d), deckPlaying(), null);
+  }
+});
+
+const WAVE_DETAIL = new Map();  // path -> detailed waveform, fetched on the first zoom
+function decodeWave(w) {
+  const raw = atob(w.data), a = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i);
+  return { n: w.slices, sec: w.seconds, a };
+}
+function drawWave(c, box) {
+  const cv = box.querySelector("#wave");
+  if (!cv || !c.wave) return;
+  const over = decodeWave(c.wave), dur = over.sec, beat = c.bar_seconds / 4;
+  const kept = box._view && box._view.path === c.path ? box._view : null;  // keep the zoom across re-renders
+  const st = box._view = { path: c.path, v0: kept ? kept.v0 : 0, v1: kept ? kept.v1 : dur, detail: WAVE_DETAIL.get(c.path) || null, loading: false };
+  const minSpan = Math.max(2 * c.bar_seconds, 3), hl = box.querySelector("#wavehl"), zl = box.querySelector("#wavezoom");
+  const barT = b => c.first_bar_s + b * c.bar_seconds, barAt = t => Math.round((t - c.first_bar_s) / c.bar_seconds);
+  const TOP = 22, BOT = 132, MID = (TOP + BOT) / 2, HALF = (BOT - TOP) / 2, OV0 = 170, OV1 = 202;
+  let W = 0, X = t => t;
+  const zoomed = () => st.v1 - st.v0 < dur * 0.98;
+
+  function setView(v0, v1) {
+    let span = Math.min(dur, Math.max(minSpan, v1 - v0));
+    v0 = Math.min(Math.max(0, v0), dur - span);
+    st.v0 = v0; st.v1 = v0 + span;
+    if (!SNAP && !st.detail && !st.loading && span < dur * 0.6) {  // close in: fetch the detailed waveform
+      st.loading = true; render();
+      api("wave", { path: c.path }).then(w => { st.detail = decodeWave(w); WAVE_DETAIL.set(c.path, st.detail); })
+        .catch(() => {}).finally(() => { st.loading = false; render(); });
+    }
+    render();
+  }
+  function columns(g, data, v0, v1, y0, y1, w, alpha) {
+    const mid = (y0 + y1) / 2, half = (y1 - y0) / 2, span = v1 - v0;
+    for (let px = 0; px < w; px++) {
+      const ta = v0 + px * span / w, tb = ta + span / w;
+      const a = Math.max(0, Math.floor(ta / data.sec * data.n)), z = Math.min(data.n, Math.max(a + 1, Math.floor(tb / data.sec * data.n)));
+      if (a >= data.n) break;
+      let pk = 0, rm = 0, lo = 0, md = 0, hi = 0;
+      for (let i = a; i < z; i++) { const o = i * 5, d = data.a; pk = Math.max(pk, d[o]); rm = Math.max(rm, d[o + 1]); lo += d[o + 2]; md += d[o + 3]; hi += d[o + 4]; }
+      const m = Math.max(lo, md, hi, 1), wl = (lo / m) ** 3, wm = (md / m) ** 3, wh = (hi / m) ** 3, sum = wl + wm + wh;
+      // lows red, mids green, highs blue; the strongest band sets the colour
+      const r = Math.round((255 * wl + 40 * wm + 60 * wh) / sum), gg = Math.round((50 * wl + 225 * wm + 140 * wh) / sum), bb = Math.round((40 * wl + 70 * wm + 255 * wh) / sum);
+      const ph = pk / 255 * half, rh = Math.min(ph, rm / 255 * half * 1.6);
+      g.fillStyle = `rgba(${r},${gg},${bb},${0.45 * alpha})`; g.fillRect(px, mid - ph, 1, ph * 2);
+      g.fillStyle = `rgba(${r},${gg},${bb},${alpha})`; g.fillRect(px, mid - rh, 1, rh * 2);
+    }
+  }
+  let render = function () {
+    const dpr = window.devicePixelRatio || 1;
+    W = cv.clientWidth; const H = cv.clientHeight;
+    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const span = st.v1 - st.v0; X = t => (t - st.v0) / span * W;
+    const pxBar = W * c.bar_seconds / span, pxBeat = pxBar / 4;
+    // grid: beats when there's room, bars, 8-bar phrases, 32-bar lines; bar numbers as dense as fits
+    const step = [1, 2, 4, 8, 16, 32, 64].find(k => pxBar * k >= 30) || 64;
+    g.font = "10px system-ui, sans-serif"; g.textAlign = "left";
+    const b0 = Math.max(0, Math.floor((st.v0 - c.first_bar_s) / c.bar_seconds) - 1), b1 = Math.min(c.bars, Math.ceil((st.v1 - c.first_bar_s) / c.bar_seconds) + 1);
+    for (let b = b0; b <= b1; b++) {
+      const x = Math.round(X(barT(b))), n = b - c.grid_bar + 1, in4 = (n - 1) % 4 === 0, in8 = (n - 1) % 8 === 0, in32 = (n - 1) % 32 === 0;
+      if (pxBeat > 8) for (let k = 1; k < 4; k++) { g.fillStyle = "rgba(255,255,255,.07)"; g.fillRect(Math.round(X(barT(b) + k * beat)), TOP, 1, BOT - TOP); }
+      // beat < bar < every 4 bars (as in Traktor) < 8-bar phrase < 32 bars
+      if (in32 || in8 || (in4 && pxBar * 4 >= 8) || pxBar > 4) {
+        g.fillStyle = in32 ? "rgba(255,255,255,.6)" : in8 ? "rgba(255,255,255,.42)" : in4 ? "rgba(255,255,255,.28)" : "rgba(255,255,255,.1)";
+        g.fillRect(x, TOP, in32 || (in8 && pxBar > 12) ? 2 : 1, BOT - TOP);
+      }
+      if (n >= 1 && (n - 1) % step === 0) { g.fillStyle = in8 ? "rgba(255,255,255,.7)" : "rgba(255,255,255,.45)"; g.fillText(String(n), x + 2, BOT - 3); }
+    }
+    const data = st.detail && span < dur * 0.6 ? st.detail : over;
+    columns(g, data, st.v0, st.v1, TOP, BOT, W, 1);
+    const vis = x => x > -40 && x < W + 40;
+    (c.loop_ideas || []).forEach((l, k) => {  // loop ideas on top of the waveform: L1 solid edges, the others lighter, numbered
+      const lx = X(l.ms / 1000), lw = Math.max(3, X(l.ms / 1000 + l.len_ms / 1000) - lx);
+      if (!vis(lx) && !vis(lx + lw)) return;
+      g.fillStyle = k === 0 ? "rgba(240,138,36,.30)" : "rgba(240,138,36,.16)"; g.fillRect(lx, TOP, lw, BOT - TOP);
+      g.fillStyle = "#f08a24"; const e = k === 0 ? 4 : 2; g.fillRect(lx, TOP, lw, e); g.fillRect(lx, BOT - e, lw, e);
+      g.font = "bold 10px system-ui, sans-serif"; g.textAlign = "left"; g.fillStyle = "#ffb067"; g.fillText(`L${k + 1}`, lx + 2, TOP + 14);
+    });
+    g.font = "11px system-ui, sans-serif"; g.textAlign = "center";
+    for (const y of myCues(c)) {  // your cues: white lines, slot numbers on top; approved new ones green
+      if (y.status === "moved") {  // a faint ghost where it was
+        const gx = Math.round(X(y.from_ms / 1000));
+        if (vis(gx)) { g.setLineDash([3, 3]); g.strokeStyle = "rgba(255,255,255,.35)"; g.beginPath(); g.moveTo(gx + 0.5, TOP); g.lineTo(gx + 0.5, BOT); g.stroke(); g.setLineDash([]); }
+      }
+      const x = Math.round(X(y.ms / 1000));
+      if (!vis(x)) continue;
+      const col = y.status === "new" ? "#4cd17a" : "#fff";
+      g.fillStyle = y.status === "new" ? "rgba(76,209,122,.95)" : "rgba(255,255,255,.9)"; g.fillRect(x, TOP, zoomed() ? 2 : 1, BOT - TOP);
+      if (y.type === "loop" && y.bars) { g.fillStyle = "rgba(255,255,255,.35)"; g.fillRect(x, TOP, X(y.ms / 1000 + y.bars * c.bar_seconds) - x, 5); }
+      const label = y.hotcue >= 0 ? String(y.hotcue + 1) : y.type === "loop" ? "L" : "•";
+      g.fillStyle = col; g.fillRect(x - 7, 3, 14, 15); g.fillStyle = "#0c0c0e"; g.fillText(label, x, 14);
+      if (y.status === "moved") { g.fillStyle = "#4cd17a"; g.beginPath(); g.arc(x + 7, 4, 3, 0, 7); g.fill(); }
+    }
+    for (const f of (c.corrections || []).filter(f => !fixSettled(c, f))) {  // proposed corrections: yellow arrows from your cue to the bar the model prefers
+      const x0 = X(f.from_ms / 1000), x1 = X(f.to_ms / 1000);
+      if (!vis(x0) && !vis(x1)) continue;
+      g.strokeStyle = g.fillStyle = "#ffd23f"; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x0, TOP + 10); g.lineTo(x1, TOP + 10); g.stroke(); g.fillRect(Math.round(x1), TOP, 2, BOT - TOP);
+      const dir = x1 >= x0 ? 1 : -1; g.beginPath(); g.moveTo(x1, TOP + 10); g.lineTo(x1 - 5 * dir, TOP + 6); g.lineTo(x1 - 5 * dir, TOP + 14); g.fill();
+      g.lineWidth = 1;
+    }
+    c.cues.forEach((q, i) => {  // suggestions: blue ticks and names below (approved ones are drawn as your cues)
+      const x = Math.round(X(q.ms / 1000));
+      if (!vis(x) || sugHidden(c, q)) return;
+      g.fillStyle = "rgba(111,180,255,.9)"; g.fillRect(x, MID + HALF * 0.55, zoomed() ? 2 : 1, BOT - (MID + HALF * 0.55));
+      g.beginPath(); g.moveTo(x - 5, BOT + 9); g.lineTo(x + 5, BOT + 9); g.lineTo(x, BOT + 2); g.fill();
+      g.fillStyle = "#cfe4ff"; g.fillText(zoomed() ? `${q.name} · bar ${barLabel(c, q.bar).n}` : q.name, Math.min(W - 30, Math.max(30, x)), BOT + 21 + (i % 2) * 12);
+    });
+    // overview of the whole track with the visible part framed; click or drag it to move
+    columns(g, over, 0, dur, OV0, OV1, W, 0.75);
+    const OX = t => t / dur * W;  // every cue on the overview too: yours white + number, suggested blue, loop orange, corrections yellow
+    for (const l of c.loop_ideas || []) { g.fillStyle = "#f08a24"; g.fillRect(OX(l.ms / 1000), OV0, Math.max(3, OX(l.len_ms / 1000)), 4); }
+    for (const q of c.cues.filter(q => !sugHidden(c, q))) { g.fillStyle = "rgba(111,180,255,.95)"; g.fillRect(Math.round(OX(q.ms / 1000)), OV0 + (OV1 - OV0) / 2, 2, (OV1 - OV0) / 2); }
+    for (const f of (c.corrections || []).filter(f => !fixSettled(c, f))) { g.fillStyle = "#ffd23f"; g.fillRect(Math.round(OX(f.to_ms / 1000)), OV0, 2, OV1 - OV0); }
+    g.font = "bold 9px system-ui, sans-serif"; g.textAlign = "left";
+    for (const y of myCues(c)) {
+      const x = Math.round(OX(y.ms / 1000)), col = y.status === "new" ? "#4cd17a" : "#fff";
+      g.fillStyle = col; g.fillRect(x, OV0, 1, OV1 - OV0);
+      const label = y.hotcue >= 0 ? String(y.hotcue + 1) : y.type === "loop" ? "L" : "";
+      if (label) { g.fillStyle = col; g.fillRect(x + 1, OV0, 9, 10); g.fillStyle = "#0c0c0e"; g.fillText(label, x + 3, OV0 + 8); }
+    }
+    if (zoomed()) {
+      const a = st.v0 / dur * W, z = st.v1 / dur * W;
+      g.fillStyle = "rgba(12,12,14,.6)"; g.fillRect(0, OV0, a, OV1 - OV0); g.fillRect(z, OV0, W - z, OV1 - OV0);
+      g.strokeStyle = "#fff"; g.strokeRect(a + 0.5, OV0 + 0.5, Math.max(2, z - a - 1), OV1 - OV0 - 1);
+    }
+    if (zl) zl.textContent = zoomed() ? `${mmss(st.v0)}–${mmss(st.v1)} · ${Math.round(span / c.bar_seconds)} bars${st.loading ? " · loading detail…" : st.detail && span < dur * 0.6 ? " · detailed" : ""}` : "whole track";
+  }
+
+  const zoomAt = (t, f) => setView(t - (t - st.v0) * f, t + (st.v1 - t) * f);
+  const timeAt = x => st.v0 + x / W * (st.v1 - st.v0);
+  cv.addEventListener("wheel", e => {
+    const x = e.offsetX;
+    if (e.ctrlKey || e.metaKey) { e.preventDefault(); zoomAt(timeAt(x), Math.exp(e.deltaY * 0.01)); }  // pinch / ctrl+scroll
+    else if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && zoomed()) { e.preventDefault(); const d = e.deltaX / W * (st.v1 - st.v0); setView(st.v0 + d, st.v1 + d); }
+  }, { passive: false });
+  cv.ondblclick = e => zoomAt(timeAt(e.offsetX), e.shiftKey ? 2 : 0.5);
+  let drag = null;
+  cv.onmousedown = e => {
+    if (e.offsetY >= OV0) { const t = e.offsetX / W * dur, h = (st.v1 - st.v0) / 2; setView(t - h, t + h); drag = { ov: true }; return; }
+    drag = { x: e.clientX, v0: st.v0, v1: st.v1, moved: false };
+  };
+  cv.onmouseup = e => {  // a click (not a drag) on the waveform jumps there, like Traktor
+    if (drag && !drag.ov && !drag.moved && !SNAP) deckSeek(timeAt(e.offsetX), deckPlaying() || !DECK.loaded, null);
+  };
+  window.addEventListener("mouseup", () => { drag = null; cv.style.cursor = ""; });
+  const marks = [...myCues(c).map(y => ({ t: y.ms / 1000, s: `${y.status === "new" ? "approved (not written yet): " : y.status === "moved" ? "your cue, approved to move here: " : ""}your ${y.type === "loop" ? `loop${y.bars ? ` (${y.bars} bars)` : ""}` : "cue"}${y.hotcue >= 0 ? " " + (y.hotcue + 1) : ""}` })),
+    ...c.cues.map(q => ({ t: q.ms / 1000, s: `suggested: ${q.name}` })), ...(c.loop_ideas || []).map((l, k) => ({ t: l.ms / 1000, s: `loop idea L${k + 1}: ${l.kind} (${l.bars} bars, ${l.why})` })),
+    ...(c.corrections || []).filter(f => !fixSettled(c, f)).map(f => ({ t: f.to_ms / 1000, s: `proposed: move your cue ${f.hotcue + 1} here` }))];
+  cv.onmousemove = e => {
+    const x = e.offsetX;
+    if (drag && drag.ov) { const t = x / W * dur, h = (st.v1 - st.v0) / 2; setView(t - h, t + h); return; }
+    if (drag && Math.abs(drag.x - e.clientX) > 3) drag.moved = true;
+    if (drag && drag.moved) { const d = (drag.x - e.clientX) / W * (drag.v1 - drag.v0); cv.style.cursor = "grabbing"; setView(drag.v0 + d, drag.v1 + d); }
+    if (e.offsetY >= OV0) { hl.style.display = "none"; tip.textContent = "Click or drag to move the view"; tip.style.display = "block"; return; }
+    const near = marks.map(m => ({ ...m, d: Math.abs(X(m.t) - x) })).filter(m => m.d < 7).sort((a, b) => a.d - b.d);
+    let lines, bi;
+    if (near.length) {  // snap to the marker: its exact bar and time
+      const t0 = near[0].t, same = near.filter(m => Math.abs(m.t - t0) < c.bar_seconds / 2), bl = barLabel(c, barAt(t0));
+      const off = (t0 - barT(barAt(t0))) / beat;
+      lines = [...same.map(m => m.s), `${bl.text} · ${mmss(t0)}${Math.abs(off) > 0.1 ? ` · ${off > 0 ? "+" : ""}${off.toFixed(1)} beats off the bar line` : ""}`, bl.phrase];
+      bi = barAt(t0);
+    } else {
+      const t = timeAt(x); bi = Math.floor((t - c.first_bar_s) / c.bar_seconds); const bl = barLabel(c, bi);
+      const bt = Math.floor((t - barT(bi)) / beat) + 1;
+      lines = [`${bl.text}${zoomed() ? `, beat ${bt}` : ""} · ${mmss(t)}`, bl.phrase];
+    }
+    hl.style.left = X(barT(bi)) + "px"; hl.style.width = Math.max(2, X(barT(bi) + c.bar_seconds) - X(barT(bi))) + "px"; hl.style.display = "block";
+    tip.textContent = lines.join("\n"); tip.style.display = "block";
+  };
+  cv.onmouseleave = () => { tip.style.display = "none"; hl.style.display = "none"; };
+  box.querySelectorAll("[data-zoom]").forEach(b => b.onclick = () => {
+    const z = b.dataset.zoom, mid = (st.v0 + st.v1) / 2;
+    if (z === "fit") setView(0, dur); else zoomAt(mid, z === "in" ? 0.5 : 2);
+  });
+  box._wave = { X: t => X(t), W: () => W, st, setView: (a, b) => setView(a, b), zoomed, dur };
+  const r0 = render;
+  render = () => { r0(); deckUi(); };  // keep the playhead in place when the view changes
+  setView(st.v0, st.v1);
+}
+function cueTable(c, sugg) {
+  const yours = myCues(c).map(y => ({ when: y.ms / 1000, what: (y.status === "new" ? "✓ approved: " : y.status === "moved" ? "✓ moved: " : "") + `${y.type === "loop" ? `Loop${y.bars ? ` ${y.bars} bars` : ""}` : "Cue"}${y.hotcue >= 0 ? ` ${y.hotcue + 1}` : ""}`, who: "yours" }));
+  const ours = sugg.map(q => ({ when: q.ms / 1000, what: q.name, who: "suggested" }));
+  (c.loop_ideas || []).forEach((l, k) => ours.push({ when: l.ms / 1000, what: `Loop idea L${k + 1}: ${l.bars} bars · ${l.kind}`, who: "suggested" }));
+  const rows = [...yours, ...ours].sort((a, b) => a.when - b.when);
+  return `<details style="margin-top:8px"><summary class="small muted">As a list</summary>${table([{ h: "Time", f: r => mmss(r.when) },
+    { h: "", f: r => r.who === "yours" ? `<span class="chip">yours</span>` : `<span class="chip good">suggested</span>` }, { h: "What", f: r => esc(r.what) }], rows)}</details>`;
+}
+
+// ---------- hype ----------
+const HF = { colour: "", bpm: "", tolerance: 4, key: "", gems: false, least: false };
+async function pageHype(main) {
+  main.innerHTML = `
+    <div class="page-head"><div><h2>Hype</h2><div class="muted">1-10 within your collection: rave sound and energy. Uses the scores from the last scan.</div></div></div>
+    <div class="filters">
+      <select id="h-colour"><option value="">Any colour</option>${COLOURS.map(c => `<option ${c === HF.colour ? "selected" : ""}>${c}</option>`).join("")}</select>
+      <label class="inline">BPM <input type="number" id="h-bpm" value="${esc(HF.bpm)}" placeholder="any"> ± <input type="number" id="h-tol" value="${HF.tolerance}" style="width:56px">%</label>
+      <label class="inline">Mixes with key <input type="text" id="h-key" value="${esc(HF.key)}" placeholder="8A" style="width:56px"></label>
+      <label class="inline" data-tip="hype 8+ but 4 stars or fewer, or played at most once"><input type="checkbox" id="h-gems" ${HF.gems ? "checked" : ""}> gems</label>
+      <label class="inline"><input type="checkbox" id="h-least" ${HF.least ? "checked" : ""}> least hype first</label>
+    </div><div id="hres" class="loading">Loading…</div>`;
+  const read = () => { HF.colour = $("#h-colour").value; HF.bpm = $("#h-bpm").value; HF.tolerance = $("#h-tol").value; HF.key = $("#h-key").value; HF.gems = $("#h-gems").checked; HF.least = $("#h-least").checked; load(); };
+  main.querySelectorAll(".filters select, .filters input").forEach(el => el.addEventListener("change", read));
+  async function load() {
+    const box = $("#hres");
+    try {
+      const d = await api("hype", { lib: S.lib, colour: HF.colour, bpm: HF.bpm, tolerance: HF.tolerance, key: HF.key, gems: HF.gems ? 1 : 0, least: HF.least ? 1 : 0, limit: 500 });
+      box.className = "";
+      box.innerHTML = `<div class="muted small" style="margin-bottom:8px">${d.matches} of ${d.scored} tracks match (${esc(d.filters.join(", "))}); ${esc(d.order)}</div>
+        <div class="card" style="padding:0">${table([
+          { h: "Hype", r: 1, f: t => hypeBadge(t.hype) }, { h: "Stars", f: t => t.stars ? "★".repeat(t.stars) : `<span class="dim">–</span>` },
+          { h: "Plays", r: 1, f: t => fmt(t.plays) }, { h: "Colour", f: t => colour(t.colour, !t.colour_is_yours) }, { h: "Track", f: trackName },
+          { h: "BPM", r: 1, f: t => fmt(t.bpm) }, { h: "Key", f: t => esc(t.camelot || "–") },
+        ], d.tracks, { rowAttr: t => `class="click" data-path="${esc(t.path)}"` })}</div>`;
+      box.onclick = e => { const tr = e.target.closest("tr[data-path]"); if (tr) openTrack(tr.dataset.path); };
+    } catch (e) { box.className = ""; box.innerHTML = errBox(e); }
+  }
+  load();
+}
+
+// ---------- colours ----------
+async function pageColours(main) {
+  const reviewTable = rows => table([
+          { h: "Track", f: t => `<div class="trk"><div class="t">${esc(t.file)}</div></div>` },
+          { h: "Yours", f: t => colour(t.your_colour) }, { h: "Sounds like", f: t => colour(t.sounds_like) },
+          { h: "Gap", r: 1, f: t => fmt(t.gap) }, { h: "Confidence", r: 1, f: t => pct(t.confidence) },
+          { h: "", f: t => (t.meets_apply_threshold ? `<span class="chip warn">over threshold</span> ` : "") + (t.kept ? `<span class="chip">kept</span>` : "") },
+        ], rows, { rowAttr: t => `class="click" data-path="${esc(t.path)}"` });
+  main.innerHTML = `<div class="page-head"><div><h2>Colours</h2><div class="muted">What your colour scale means, and where the model disagrees with you.</div></div></div>
+    <div id="c-model" class="loading">Loading model…</div><div id="c-explain" class="loading">Loading profile (reads Traktor's collection and History)…</div>`;
+  const [rv, ex, kp] = await Promise.allSettled([api("colours/review", { limit: 200 }), api("colours/explain"), api("colours/kept")]);
+  const m = $("#c-model"); m.className = "";
+  if (rv.status === "rejected") m.innerHTML = errBox(rv.reason);
+  else {
+    const r = rv.value, a = r.accuracy || {};
+    m.innerHTML = `<div class="tiles">
+        <div class="tile"><div class="v">${fmt(a.average_error_per_colour)}</div><div class="l">average error per colour (in colours)</div></div>
+        <div class="tile"><div class="v">${pct(a.within_one_colour)}</div><div class="l">within one colour</div></div>
+        <div class="tile"><div class="v">${pct(a.exact)}</div><div class="l">exactly right</div></div>
+        <div class="tile"><div class="v" style="font-size:15px;padding-top:6px">${esc(r.trained_at)}</div><div class="l">trained · ${esc(r.model || "")}</div></div>
+      </div>
+      <div class="card"><h3>Tracks that disagree with their colour <span class="dim small">(cross-validated: predicted without seeing the track)</span></h3>
+        <div class="note" style="margin:0 0 10px">${r.apply_threshold.tracks_meeting_it} meet the recolour threshold (gap ≥ ${r.apply_threshold.min_gap}, confidence ≥ ${pct(r.apply_threshold.min_confidence)}).
+        ${r.always_kept ? `${r.always_kept} you chose to keep always.` : ""} To recolour: <span class="mono">colors review --apply --dry-run</span></div>
+        ${reviewTable(r.tracks.slice(0, 25))}
+        ${r.tracks.length > 25 ? `<details><summary class="small muted" style="margin-top:8px;cursor:pointer">Show ${r.tracks.length - 25} more</summary>${reviewTable(r.tracks.slice(25))}</details>` : ""}
+      </div>`;
+    m.onclick = e => { const tr = e.target.closest("tr[data-path]"); if (tr) openTrack(tr.dataset.path); };
+  }
+  const x = $("#c-explain"); x.className = "";
+  if (ex.status === "rejected") { x.innerHTML = `<div class="card"><h3>Colour profile</h3>${errBox(ex.reason)}</div>`; return; }
+  const e = ex.value, names = e.colours;
+  const profRows = Object.entries(e.profile).map(([feat, per]) => {
+    const vals = names.map(n => per[n]).filter(v => v != null), lo = Math.min(...vals), hi = Math.max(...vals);
+    return `<tr><td>${esc(feat)}${e.correlations[feat] != null ? ` <span class="dim small" data-tip="Spearman correlation with Red=1 … Magenta=7">ρ ${e.correlations[feat] > 0 ? "+" : ""}${e.correlations[feat]}</span>` : ""}</td>${names.map(n => {
+      const v = per[n], s = v == null || hi === lo ? 0 : (v - lo) / (hi - lo);
+      return `<td class="h" style="background:color-mix(in srgb, var(--bar) ${Math.round(s * 55)}%, transparent)" data-tip="${esc(feat)} · ${n}: ${v ?? "–"}">${v == null ? "–" : Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2)}</td>`;
+    }).join("")}</tr>`;
+  }).join("");
+  const sets = e.sets.by_colour;
+  x.innerHTML = `
+    <div class="card"><h3>Profile per colour <span class="dim small">(${e.tracks} coloured tracks; darker = highest of the row)</span></h3>
+      <div class="tablewrap"><table class="heat"><thead><tr><th>Feature</th>${names.map(n => `<th class="r">${colour(n)}<div class="dim small">${e.tracks_per_colour[n]}</div></th>`).join("")}</tr></thead><tbody>${profRows}</tbody></table></div>
+      <div class="note">${e.notes.map(esc).join("<br>")}</div></div>
+    <div class="grid two">
+      <div class="card"><h3>Strongest links to the scale</h3>${bars(e.strongest_links.map(l => ({ label: l.feature, value: Math.abs(l.correlation), valText: (l.correlation > 0 ? "+" : "") + l.correlation + (l.correlation > 0 ? " → Magenta" : " → Red") })), { max: 1 })}</div>
+      <div class="card"><h3>Where in a set <span class="dim small">(${e.sets.sessions} History sessions)</span></h3>
+        ${table([{ h: "Colour", f: n => colour(n) }, { h: "Plays", r: 1, f: n => sets[n].plays },
+          ...["first_third", "middle_third", "last_third"].map(k => ({ h: k.replace("_", " "), r: 1, f: n => `<span style="display:inline-block;width:${Math.round(sets[n][k] * 60)}px;height:8px;background:var(--bar);border-radius:0 3px 3px 0;margin-right:6px"></span>${pct(sets[n][k])}` }))],
+          names.filter(n => sets[n]))}</div>
+    </div>
+    <div class="grid two">
+      <div class="card"><h3>Playlists <span class="dim small">(3+ coloured tracks, hardest first)</span></h3>
+        ${table([{ h: "Playlist", f: p => esc(p.playlist) }, { h: "Tracks", r: 1, f: p => p.tracks }, { h: "Avg", r: 1, f: p => p.average },
+          { h: "Mix", f: p => `<div class="stack">${names.filter(n => p.counts[n]).map(n => `<div class="sw-${n}" style="flex:${p.counts[n]}" data-tip="${n}: ${p.counts[n]}"></div>`).join("")}</div>` },
+          { h: "Stands out", f: p => p.stands_out.map(n => colour(n)).join(" ") }], e.playlists)}</div>
+      <div class="card"><h3>Artists</h3>${e.artists ? `<div class="muted small" style="margin-bottom:8px">${e.artists.artists_with_3_plus} artists with 3+ tracks. Their tracks sit ${e.artists.spread_within_artist} colours from the artist's average, random groups ${e.artists.spread_random_groups}.</div>
+        ${table([{ h: "Artist", f: a => esc(a.artist) }, { h: "Tracks", r: 1, f: a => a.tracks }, { h: "Average", f: a => `${colour(a.average_colour)} <span class="dim small">${a.average}</span>` }], e.artists.top)}` : `<div class="dim">Not enough artists with 3+ tracks.</div>`}</div>
+    </div>
+    ${kp.status === "fulfilled" && kp.value.always_kept.length ? `<div class="card"><h3>Kept always <span class="dim small">(review --apply skips these)</span></h3>
+      ${table([{ h: "Track", f: k => esc(k.file) }, { h: "Your colour", f: k => colour(k.your_colour) }, { h: "Since", f: k => esc(k.kept_since) }], kp.value.always_kept)}</div>` : ""}`;
+}
+
+// ---------- tempo ----------
+async function pageTempo(main, bpmArg) {
+  const views = S.libs.libraries.filter(l => l.bpm);
+  if (!views.length) { main.innerHTML = `<h2>Tempo view</h2><div class="card">No tempo view scanned yet. Run <span class="mono">uv run dj-track-analyzer tempo scan --bpm 145</span>.</div>`; return; }
+  const bpm = +(bpmArg || views[0].bpm);
+  const d = await api("tempo/report", { bpm, limit: 25 });
+  const brief = rows => table([{ h: "Track", f: r => esc(r.track) }, { h: "BPM", r: 1, f: r => fmt(r.bpm) }, { h: "Genres", f: r => esc(r.genres) },
+    { h: "Colour", f: r => esc(r.colour || "–") }, { h: "Hype", f: r => esc(r.hype) }], rows);
+  const toBars = o => Object.entries(o).map(([k, v]) => ({ label: k, value: v }));
+  const max = Math.max(...Object.values(d.genres_native), ...Object.values(d.genres_at_bpm));
+  const cmax = Math.max(...Object.values(d.colours_native), ...Object.values(d.colours_at_bpm));
+  const ordered = o => COLOURS.filter(c => o[c]).map(c => ({ label: c, value: o[c] }));
+  main.innerHTML = `
+    <div class="page-head"><div><h2>Tempo view: ${d.bpm} BPM</h2><div class="muted">Your catalogue as heard stretched to ${d.bpm} BPM with key lock, compared with each track at its own tempo.</div></div>
+      <div class="spacer"></div>${views.length > 1 ? `<select onchange="location.hash='tempo/'+this.value">${views.map(v => `<option value="${v.bpm}" ${v.bpm === bpm ? "selected" : ""}>${v.bpm} BPM</option>`).join("")}</select>` : ""}</div>
+    <div class="tiles">
+      <div class="tile"><div class="v">${d.tracks}</div><div class="l">tracks compared</div></div>
+      <div class="tile"><div class="v">${d.tempo_change.median_pct > 0 ? "+" : ""}${d.tempo_change.median_pct}%</div><div class="l">median tempo change (${d.tempo_change.min_pct}% … +${d.tempo_change.max_pct}%)</div></div>
+      <div class="tile"><div class="v">${d.genre_changed}</div><div class="l">top genre changed</div></div>
+      <div class="tile"><div class="v">${d.colour_changed} <span class="dim" style="font-size:14px">/ ${d.colours_coloured_tracks}</span></div><div class="l">colour changed</div></div>
+      <div class="tile"><div class="v">${d.colour_mean_shift > 0 ? "+" : ""}${fmt(d.colour_mean_shift)}</div><div class="l">mean colour shift (+ = prettier)</div></div>
+    </div>
+    <div class="grid two">
+      <div class="card"><h3>Genres at own tempo</h3>${bars(toBars(d.genres_native), { max })}</div>
+      <div class="card"><h3>Genres at ${d.bpm} BPM</h3>${bars(toBars(d.genres_at_bpm), { max })}</div>
+    </div>
+    <div class="grid two">
+      <div class="card"><h3>Most common genre changes</h3>${table([{ h: "From", f: f => esc(f.from) }, { h: "", f: () => "→" }, { h: "To", f: f => esc(f.to) }, { h: "Tracks", r: 1, f: f => f.tracks }], d.genre_flips)}</div>
+      <div class="card"><h3>Your colours at ${d.bpm} BPM</h3>
+        ${table([{ h: "Yours", f: ([n]) => colour(n) }, { h: "Tracks", r: 1, f: ([, v]) => v.tracks }, { h: "Mean shift", r: 1, f: ([, v]) => (v.mean_shift > 0 ? "+" : "") + v.mean_shift },
+          { h: `Now`, f: ([, v]) => `<div class="stack">${COLOURS.filter(c => v.now[c]).map(c => `<div class="sw-${c}" style="flex:${v.now[c]}" data-tip="${c}: ${v.now[c]}"></div>`).join("")}</div>` }],
+          COLOURS.filter(c => d.by_your_colour[c]).map(c => [c, d.by_your_colour[c]]))}
+        <div class="grid" style="margin-top:12px;grid-template-columns:1fr 1fr;gap:12px"><div><div class="small muted">own tempo</div>${bars(ordered(d.colours_native), { max: cmax, colourLabels: true })}</div>
+        <div><div class="small muted">at ${d.bpm} BPM</div>${bars(ordered(d.colours_at_bpm), { max: cmax, colourLabels: true })}</div></div></div>
+    </div>
+    <div class="card"><h3>Turn hardest at ${d.bpm} BPM</h3>${brief(d.hardest_turns)}</div>
+    <div class="card"><h3>Turn prettiest</h3>${brief(d.prettiest_turns)}</div>
+    <div class="grid two"><div class="card"><h3>Most hype at ${d.bpm} BPM</h3>${brief(d.most_hype)}</div><div class="card"><h3>Biggest hype risers</h3>${brief(d.hype_risers)}</div></div>`;
+}
+
+// ---------- mixes ----------
+let LOGS = null;
+async function getLogs(force) { if (!LOGS || force) LOGS = await api("saved"); return LOGS; }
+const ago = t => new Date(t * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+async function pageMixes(main, id) {
+  const me = S.routeId, L = await getLogs(true), mixes = L.files.filter(f => f.kind === "mix");
+  if (me !== S.routeId) return;
+  if (!id && mixes.length) id = mixes[0].id;
+  main.innerHTML = `<div class="split">
+    <div class="card list" style="padding:8px"><div class="small muted" style="padding:4px 10px 8px">Saved <span class="mono">analyze</span> results of mixes in ${L.folders.map(esc).join(", ")}</div>
+      ${mixes.map(f => `<a href="#mixes/${encodeURIComponent(f.id)}" class="${f.id === id ? "on" : ""}"><div>${esc(f.name)}</div><div class="k">${esc(f.recording || "")} · ${esc(f.duration || "")} · ${ago(f.modified)}</div></a>`).join("") || `<div class="dim" style="padding:10px">None yet. Save one with:<br><span class="mono">analyze &lt;mix.wav&gt; --tracklist --json-only &gt; logs/mix.json</span></div>`}
+      <div style="padding:10px"><div class="drop" id="drop">Drop a JSON file here or <a href="#" id="pick">open one</a><input type="file" id="file" accept=".json,.txt" hidden></div></div>
+    </div><div id="mix">${id ? `<div class="loading">Loading…</div>` : ""}</div></div>`;
+  dropZone($("#drop"), $("#file"), $("#pick"), data => { $("#mix").innerHTML = data.type === "dj_mix" ? renderMix(data) : `<div class="card tree">${tree(data)}</div>`; });
+  if (id) {
+    const me = S.routeId;  // a newer click wins over a slower earlier answer
+    try { const d = await api("saved-file", { id }); if (me === S.routeId) $("#mix").innerHTML = renderMix(d); }
+    catch (e) { if (me === S.routeId) $("#mix").innerHTML = errBox(e); }
+  }
+}
+function dropZone(zone, input, pick, onData) {
+  const read = file => { const fr = new FileReader(); fr.onload = () => { try { const txt = fr.result, i = txt.indexOf("{"); onData(JSON.parse(txt.slice(i, findEnd(txt, i)))); } catch (e) { alert("Not a JSON file: " + e.message); } }; fr.readAsText(file); };
+  pick.onclick = e => { e.preventDefault(); input.click(); };
+  input.onchange = () => input.files[0] && read(input.files[0]);
+  zone.ondragover = e => { e.preventDefault(); zone.classList.add("over"); };
+  zone.ondragleave = () => zone.classList.remove("over");
+  zone.ondrop = e => { e.preventDefault(); zone.classList.remove("over"); e.dataTransfer.files[0] && read(e.dataTransfer.files[0]); };
+}
+function findEnd(txt, i) { // end of the first JSON object (stderr may follow it in a teed file)
+  let depth = 0, str = false;
+  for (let k = i; k < txt.length; k++) {
+    const c = txt[k];
+    if (str) { if (c === "\\") k++; else if (c === '"') str = false; continue; }
+    if (c === '"') str = true; else if (c === "{" || c === "[") depth++; else if ((c === "}" || c === "]") && --depth === 0) return k + 1;
+  }
+  return txt.length;
+}
+const toSec = s => { if (s == null) return null; const p = String(s).split(":").map(Number); return p.reduce((a, b) => a * 60 + b, 0); };
+function keyChip(t) {
+  const k = t.key_check; if (!k) return "";
+  const cls = k === "match" ? "good" : /one step|neighbour|close/.test(k) ? "warn" : /short|unknown/.test(k) ? "" : "bad";
+  return `<span class="chip ${cls}">${esc(k)}</span>`;
+}
+function renderMix(d) {
+  const tl = d.timeline || [], tlist = d.tracklist, hl = d.highlights || [];
+  const lufs = tl.map(s => s.lufs ?? -40), lo = Math.min(...lufs) - 2, hi = Math.max(...lufs);
+  const hlSecs = hl.map(h => [toSec(h.start), toSec(h.end)]);
+  const segHl = s => hlSecs.some(([a, b]) => toSec(s.start) < b && toSec(s.end) > a);
+  const everyX = Math.ceil(tl.length / 10);
+  const kl = tlist?.keylock;
+  return `
+    <div class="page-head"><div><h2>${esc((d.file || "").split("/").pop())}</h2><div class="muted">${esc(d.duration)} · ${fmt(d.loudness?.integrated_lufs, 1)} LUFS · range ${fmt(d.loudness?.loudness_range_lu, 1)} LU${d.analysis_seconds ? ` · analysed in ${Math.round(d.analysis_seconds)} s` : ""}</div></div></div>
+    <div class="grid">
+      <div class="card"><h3>Genre of the mix</h3>${bars((d.dj_genre || []).map(g => ({ label: g.genre, value: g.score })))}
+        ${d.genre_basis?.dj_genre ? `<div class="note">${esc(d.genre_basis.dj_genre)}</div>` : ""}
+        ${d.dj_genre_uncorrected ? `<div class="note">Without the psy gate: ${d.dj_genre_uncorrected.map(g => `${esc(g.genre)} ${g.score}`).join(", ")}</div>` : ""}</div>
+      <div class="card"><h3>Mood</h3>${bars(Object.entries(d.mood || {}).map(([k, v]) => ({ label: k, value: v })), { max: 1, fmtVal: pct })}
+        <div class="note">vocals ${pct(d.vocal_share)} of the mix · approachability ${fmt(d.approachability)}</div></div>
+      <div class="card"><h3>Styles</h3>${bars((d.discogs_styles || []).map(s => ({ label: s.style, value: s.score })))}
+        ${d.mixing ? `<div class="note">What the mixing (effects, stems, overlap) added: ${[...(d.mixing.up || []), ...(d.mixing.down || [])].map(esc).join(", ") || "nothing notable"}</div>` : ""}</div>
+    </div>
+    ${tl.length ? `<div class="card"><h3>Timeline <span class="dim small">(loudness per ${esc(tl[0].start)}–${esc(tl[0].end)} segment; hover for genre, key and tracks)</span></h3>
+      <div class="timeline">${tl.map(s => `<div class="seg ${segHl(s) ? "hl" : ""}" style="height:${((s.lufs ?? lo) - lo) / (hi - lo || 1) * 100}%" data-tip="${esc(`${s.start}–${s.end}\n${s.dj_genre || "–"} · ${s.bpm ?? "–"} BPM · ${s.camelot || "–"} (${s.key || ""})\n${s.lufs} LUFS\n${(s.styles || []).join(", ")}${s.tracks?.length ? "\n♪ " + s.tracks.join("\n♪ ") : ""}`)}"></div>`).join("")}</div>
+      <div class="tl-x">${tl.map((s, i) => `<span>${i % everyX ? "" : esc(s.start)}</span>`).join("")}</div>
+      ${hl.length ? `<div class="legend"><span><i style="background:var(--bar)"></i>segment</span><span><i style="background:var(--c-orange)"></i>contains a highlight</span></div>` : ""}
+      <details style="margin-top:10px"><summary class="small muted">Table</summary>${table([{ h: "Time", f: s => `${esc(s.start)}–${esc(s.end)}` }, { h: "BPM", r: 1, f: s => fmt(s.bpm) }, { h: "Key", f: s => esc(s.camelot || "–") },
+        { h: "LUFS", r: 1, f: s => fmt(s.lufs, 1) }, { h: "Genre", f: s => esc(s.dj_genre || "–") }, { h: "Styles", f: s => `<span class="small">${esc((s.styles || []).join(", "))}</span>` }, { h: "Tracks", f: s => `<span class="small">${esc((s.tracks || []).join(" · "))}</span>` }], tl)}</details></div>` : ""}
+    ${tlist ? `<div class="card"><h3>Tracklist check <span class="dim small">against Traktor's history</span></h3>
+      <dl class="facts"><dt>History</dt><dd class="mono" style="word-break:break-all">${esc(tlist.history)}</dd><dt>Recording start</dt><dd>${esc(tlist.recording_start)}</dd>
+      ${kl ? `<dt>Key lock</dt><dd><b>${esc(kl.verdict)}</b> · ${esc(kl.summary)} <span class="dim small">(${esc(kl.basis)}; blend lag ${kl.blend_lag_seconds} s)</span></dd>` : ""}
+      ${tlist.overlap_share != null ? `<dt>Overlap</dt><dd>${pct(tlist.overlap_share)} of the mix has two decks playing</dd>` : ""}</dl>
+      ${table([{ h: "#", r: 1, f: t => t.n }, { h: "Start", f: t => esc(t.start) }, { h: "Deck", f: t => esc(t.deck || "") }, { h: "Track", f: trackName },
+        { h: "BPM", f: t => `${fmt(t.bpm)}${t.played_bpm ? ` → ${t.played_bpm} <span class="dim small">${esc(t.speed || "")}</span>` : ""}` },
+        { h: "Key", f: t => `${esc(t.camelot || "–")}${t.heard_camelot && t.heard_camelot !== t.camelot ? ` <span class="dim small">heard ${esc(t.heard_camelot)}</span>` : ""} ${keyChip(t)}` },
+        { h: "Genre", f: t => `${esc(t.library_genre || "–")}${t.genre && t.genre !== t.library_genre ? ` → <b>${esc(t.genre)}</b>` : ""}${t.genre_uncorrected && t.genre_uncorrected !== t.genre ? `<div class="dim small">ungated ${esc(t.genre_uncorrected)}</div>` : ""}` },
+        { h: "Mixing", f: t => t.mixing ? `<span class="small">${[...(t.mixing.up || []), ...(t.mixing.down || [])].map(esc).join(", ")}</span>` : "" },
+        { h: "Judged on", f: t => `<span class="small dim">${esc(t.judged_on || t.note || "")}</span>` }], tlist.tracks || [])}</div>` : ""}
+    ${hl.length ? `<div class="card"><h3>Clip suggestions</h3>${table([{ h: "Rank", r: 1, f: h => h.rank }, { h: "Mix time", f: h => `${esc(h.start)}–${esc(h.end)}` },
+        { h: "Video time", f: h => esc(h.video || "–") }, { h: "LUFS", r: 1, f: h => fmt(h.lufs, 1) }, { h: "Rise", r: 1, f: h => `${fmt(h.rise_lu, 1)} LU` }, { h: "Track", f: h => esc(h.track || "") }], hl)}
+      <div class="note">Make previews: <span class="mono">clips &lt;this.json&gt; --video &lt;final.mp4&gt;</span></div></div>` : ""}
+    ${d.chapters?.length ? `<div class="card"><h3>YouTube chapters <button style="float:right" onclick="navigator.clipboard.writeText(this.closest('.card').querySelector('textarea').value);this.textContent='Copied'">Copy</button></h3><textarea readonly>${esc(d.chapters.join("\n"))}</textarea></div>` : ""}
+    <details class="card"><summary class="muted">Raw JSON</summary><div class="tree" style="margin-top:8px">${tree(d)}</div></details>`;
+}
+
+// ---------- files ----------
+async function pageFiles(main, id) {
+  const me = S.routeId, L = await getLogs(true);
+  if (me !== S.routeId) return;
+  main.innerHTML = `<div class="split">
+    <div class="card list" style="padding:8px"><div class="small muted" style="padding:4px 10px 8px">Saved JSON output in ${L.folders.map(esc).join(", ")}</div>
+      ${L.files.map(f => `<a href="#files/${encodeURIComponent(f.id)}" class="${f.id === id ? "on" : ""}"><div>${esc(f.name)}</div><div class="k">${esc(f.kind)} · ${ago(f.modified)}</div></a>`).join("") || `<div class="dim" style="padding:10px">No JSON files yet.</div>`}
+      <div style="padding:10px"><div class="drop" id="drop">Drop a JSON file here or <a href="#" id="pick">open one</a><input type="file" id="file" accept=".json,.txt" hidden></div></div>
+    </div><div id="fview">${id ? `<div class="loading">Loading…</div>` : `<div class="card dim">Pick a file. Mix analyses also open nicely in the Mixes tab.</div>`}</div></div>`;
+  const show = d => { $("#fview").innerHTML = d && d.type === "dj_mix" ? renderMix(d) : `<div class="card tree">${tree(d)}</div>`; };
+  dropZone($("#drop"), $("#file"), $("#pick"), show);
+  if (id) {
+    const me = S.routeId;
+    try { const d = await api("saved-file", { id }); if (me === S.routeId) show(d); } catch (e) { if (me === S.routeId) $("#fview").innerHTML = errBox(e); }
+  }
+}
+function tree(v, key, depth = 0) {
+  const k = key != null ? `<span class="key">${esc(key)}</span>: ` : "";
+  if (v === null) return `<div class="kv">${k}<span class="dim">null</span></div>`;
+  if (Array.isArray(v) || typeof v === "object") {
+    const entries = Array.isArray(v) ? v.map((x, i) => [i, x]) : Object.entries(v);
+    const simple = entries.every(([, x]) => x === null || typeof x !== "object") && entries.length <= 8 && JSON.stringify(v).length < 110;
+    if (simple) return `<div class="kv">${k}${esc(JSON.stringify(v))}</div>`;
+    const label = Array.isArray(v) ? `[${v.length}]` : `{${entries.length}}`;
+    return `<details ${depth < 1 ? "open" : ""}><summary>${k}<span class="dim">${label}</span></summary>${entries.map(([kk, x]) => tree(x, kk, depth + 1)).join("")}</details>`;
+  }
+  const cls = typeof v === "string" ? "s" : typeof v === "number" ? "n" : "b";
+  return `<div class="kv">${k}<span class="${cls}">${esc(typeof v === "string" ? JSON.stringify(v) : v)}</span></div>`;
+}
+
+loadLibs().then(route).catch(e => { $("#main").innerHTML = errBox(e); });
+</script>
+</body>
+</html>

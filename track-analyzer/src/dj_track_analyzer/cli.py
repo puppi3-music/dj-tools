@@ -180,6 +180,16 @@ def main() -> None:
                     help="load / native: switch Lexicon too (Lexicon open, Settings → Integrations → Local API on)")
     te.add_argument("--limit", type=int, default=15, help="report: tracks per list")
     te.add_argument("--json", action="store_true", help="report: print JSON")
+    cu = sub.add_parser("cues", help="cue points and a mix loop per track, learned from the cues you set yourself")
+    cu.add_argument("action", choices=["train", "scan", "show", "apply"],
+                    help="train: learn from your own cues (listens to the cued tracks first). "
+                         "scan: listen to every track with a beat grid. show: suggestions for one track. "
+                         "apply: write the cues you approved in the web page into Traktor (Traktor closed)")
+    cu.add_argument("track", nargs="?", default=None, help="show: part of the track's file name")
+    cu.add_argument("--nml", default=None, help="path to collection.nml")
+    cu.add_argument("--workers", type=int, default=None, help="parallel listeners (default: half your CPU cores, max 5)")
+    cu.add_argument("--rescan", action="store_true", help="scan: listen again even if measured")
+    cu.add_argument("--dry-run", action="store_true", help="apply: show what would be written, change nothing")
     sub.add_parser("regenre", help="recompute the genres of scanned tracks from the cache (after editing dj_genres.json)")
     ex = sub.add_parser("export", help="write the scanned collection to a CSV spreadsheet")
     ex.add_argument("out", nargs="?", default=None)
@@ -188,6 +198,19 @@ def main() -> None:
     st.add_argument("--native", action="store_true", help="use the normal library even while a tempo view is loaded")
     t = sub.add_parser("train", help="train your own genres from a folder")
     t.add_argument("folder")
+    w = sub.add_parser("web", help="browse everything in a local web page (also holds, cue approvals, loop samples)")
+    w.add_argument("--host", default="127.0.0.1")
+    w.add_argument("--port", type=int, default=8766)
+    w.add_argument("--logs", action="append", default=None, metavar="FOLDER",
+                   help="folder with saved JSON output, e.g. analyze results of mixes (default logs/; repeat for several)")
+    w.add_argument("--no-open", action="store_true", help="don't open the browser")
+    w.add_argument("--export", metavar="FILE.html", default=None,
+                   help="save a read-only snapshot of the page as one HTML file instead of serving it")
+    ho = sub.add_parser("hold", help="keep tracks' genre or colour as they are when writing to files, Traktor or Lexicon")
+    ho.add_argument("--genre", metavar="TEXT", default=None, help="hold the genre of the scanned tracks whose path contains TEXT")
+    ho.add_argument("--colour", "--color", dest="colour", metavar="TEXT", default=None,
+                    help="hold the colour of the scanned tracks whose path contains TEXT")
+    ho.add_argument("--release", action="store_true", help="with --genre/--colour: take those tracks off the hold list")
     s = sub.add_parser("serve", help="run the MCP server")
     s.add_argument("--http", action="store_true", help="streamable HTTP instead of stdio")
     s.add_argument("--host", default="127.0.0.1")
@@ -307,6 +330,10 @@ def main() -> None:
         from . import tempo
 
         tempo.main(args)
+    elif args.cmd == "cues":
+        from . import cues
+
+        cues.main(args)
     elif args.cmd == "regenre":
         from . import collection
 
@@ -321,6 +348,26 @@ def main() -> None:
         from . import collection
 
         print(json.dumps(collection.summary(), indent=2, ensure_ascii=False))
+    elif args.cmd == "web":
+        from . import web
+
+        if args.export:
+            web.export_file(args.export, args.logs)
+        else:
+            web.serve(args.host, args.port, args.logs, open_browser=not args.no_open)
+    elif args.cmd == "hold":
+        from . import collection
+
+        if args.genre and args.colour:
+            raise SystemExit("One at a time: --genre TEXT or --colour TEXT")
+        if args.genre or args.colour:
+            out = collection.hold_matching("genre" if args.genre else "colour", args.genre or args.colour,
+                                           on=not args.release)
+        elif args.release:
+            raise SystemExit("--release goes with --genre TEXT or --colour TEXT")
+        else:
+            out = collection.holds_list()
+        print(json.dumps(out, indent=2, ensure_ascii=False))
     elif args.cmd == "serve" and args.http:
         log(f"Track Analyzer MCP on http://{args.host}:{args.port}/mcp")
         build_mcp().run(transport="streamable-http", host=args.host, port=args.port)

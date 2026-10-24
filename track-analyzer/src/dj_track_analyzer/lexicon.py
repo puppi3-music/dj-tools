@@ -150,7 +150,8 @@ def build(bpm: float, view_db: sqlite3.Connection, shifted_colour) -> tuple[dict
         raise SystemExit(f"No {bpm:g} BPM analysis yet. Run: uv run dj-track-analyzer tempo scan --bpm {bpm:g}")
     changes, genres, examples = {}, set(), []
     stats = {"lexicon_tracks": 0, "in_view": 0, "genres_set": 0, "colours_moved": 0, "colours_same": 0,
-             "hype_set": 0, "energy_set": 0, "not_in_view": 0}
+             "hype_set": 0, "energy_set": 0, "not_in_view": 0, "genre_held": 0, "colour_held": 0}
+    genre_held, colour_held = collection.held("genre"), collection.held("colour")
     for t in tracks():
         stats["lexicon_tracks"] += 1
         r = next((view[p] for p in _paths(t.get("location")) if p in view), None)
@@ -159,13 +160,18 @@ def build(bpm: float, view_db: sqlite3.Connection, shifted_colour) -> tuple[dict
             continue
         stats["in_view"] += 1
         want = {}
-        if r["genre"]:
+        if r["path"] in genre_held:  # held in the analyzer: your genre stays, with its Smartlist
+            stats["genre_held"] += 1
+            genres.update(g.strip() for g in (t.get("genre") or "").split(";") if g.strip())
+        elif r["genre"]:
             want["genre"] = collection.multi_genre(dict(r))
             genres.update(g.strip() for g in want["genre"].split(";"))
         cur_col = (t.get("color") or "").lower()
         yours = LEX_COLORS.index(cur_col) + 1 if cur_col in LEX_COLORS else None
         at = shifted_colour(yours, r["color_position"], r["native_color_position"])
-        if at is not None:
+        if r["path"] in colour_held:
+            stats["colour_held"] += 1
+        elif at is not None:
             want["color"] = LEX_COLORS[at - 1]
             stats["colours_moved" if at != yours else "colours_same"] += 1
         if r["hype"] is not None:

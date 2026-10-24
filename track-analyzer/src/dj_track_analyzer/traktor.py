@@ -37,6 +37,41 @@ BACKUP_PREFIX = "collection.nml.before-track-analyzer-"
 UUID_NS = uuid.UUID("6f1c0a52-2d0e-4b4e-9a51-7a3c6f0d9e11")
 
 
+_offsets: dict[str, int] = {}  # path -> audio_offset
+
+
+def _mp3_info_frame(path: Path) -> bool:
+    """Does the MP3 start with a Xing/Info frame (the header frame LAME and ffmpeg write before the audio)?"""
+    with open(path, "rb") as f:
+        h = f.read(10)
+        i = 10 + ((h[6] << 21) | (h[7] << 14) | (h[8] << 7) | h[9]) + (10 if h[5] & 0x10 else 0) if h[:3] == b"ID3" else 0
+        f.seek(i)
+        b = f.read(4096)
+    j = next((k for k in range(len(b) - 1) if b[k] == 0xFF and b[k + 1] & 0xE0 == 0xE0), None)
+    return j is not None and (b.find(b"Xing", j, j + 200) != -1 or b.find(b"Info", j, j + 200) != -1)
+
+
+def audio_offset(path: Path) -> int:
+    """Samples (at the file's own rate) by which Traktor's timeline runs ahead of ffmpeg's and Essentia's for this file:
+    Traktor time = decoded time + this. ffmpeg skips an MP3's Xing/Info frame and the encoder/decoder delay its LAME tag
+    gives (ffmpeg's start_time); Traktor plays both. Checked to the sample against Traktor 4 Remix Deck captures for
+    each kind of MP3 in a test library: 2257 (Info frame + 1105 delay), 1152 (Info frame, no delay), 1681 (Info frame +
+    529), 0 (neither). Other formats: 0."""
+    k = str(path)
+    if k not in _offsets:
+        n = 0
+        if path.suffix.lower() == ".mp3":
+            out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=start_time,sample_rate",
+                                  "-of", "csv=p=0", k], capture_output=True, text=True, timeout=30).stdout.strip().split(",")
+            try:
+                sr, st = int(out[0]), float(out[1])
+            except (ValueError, IndexError):
+                sr, st = 44100, 0.0
+            n = round(st * sr) + (1152 if _mp3_info_frame(path) else 0)
+        _offsets[k] = n
+    return _offsets[k]
+
+
 # ----------------------------------------------------------------------------
 # Finding Traktor's collection
 # ----------------------------------------------------------------------------
@@ -483,6 +518,7 @@ def sync(nml: str | None = None, dry_run: bool = False, update_genres: bool = Tr
     if colors:
         stats.update(colours_set=0, colours_kept=0, no_colour_prediction=0)
     examples, genres_seen, traktor_colors = [], set(), {}
+    genre_held, colour_held = collection.held("genre"), collection.held("colour")
 
     def fix_entry(m: re.Match) -> str:
         entry = m.group(0)
@@ -494,7 +530,13 @@ def sync(nml: str | None = None, dry_run: bool = False, update_genres: bool = Tr
         if not p:
             return entry
         stats["matched_scanned_tracks"] += 1
-        if update_genres:
+        if update_genres and p in genre_held:
+            stats["genre_held"] = stats.get("genre_held", 0) + 1  # Traktor's genre stays as it is
+            info_m = re.search(r"<INFO\b[^>]*>", entry)
+            g = attrs(info_m.group(0)).get("GENRE") if info_m else None
+            if g:  # still gets its Smartlist
+                genres_seen.update(x.strip() for x in g.split(";") if x.strip())
+        elif update_genres:
             g = file_genre(p)
             if not g:
                 stats["no_genre_tag_in_file"] += 1
@@ -515,7 +557,9 @@ def sync(nml: str | None = None, dry_run: bool = False, update_genres: bool = Tr
             if has:
                 traktor_colors[p] = int(cur)
             want = predicted.get(p)
-            if want is None:
+            if p in colour_held:
+                stats["colour_held"] = stats.get("colour_held", 0) + 1
+            elif want is None:
                 if not has:
                     stats["no_colour_prediction"] += 1
             elif has and not overwrite_colors:

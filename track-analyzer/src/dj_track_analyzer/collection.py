@@ -59,6 +59,64 @@ def mix_camelot(row) -> str | None:
     return row["traktor_camelot"] or row["camelot"]
 
 
+# Held tracks: the writers (tag, scan --write-tags, traktor, colors review --apply, tempo load, Lexicon) leave
+# their genre / colour as it is. Kept in the normal library's database, also while a tempo view is in use.
+NATIVE_DB = DB
+HOLDS = {"genre": ("genre_keep", "genre"), "colour": ("color_keep", "colour")}  # kind: (table, value column)
+
+
+def _hold_db() -> sqlite3.Connection:
+    con = sqlite3.connect(NATIVE_DB)
+    for table, col in HOLDS.values():
+        con.execute(f"CREATE TABLE IF NOT EXISTS {table} (path TEXT PRIMARY KEY, {col} TEXT, at TEXT)")
+    return con
+
+
+def held(kind: str) -> set[str]:
+    """Paths whose genre ("genre") or colour ("colour") is held."""
+    if not NATIVE_DB.exists():
+        return set()
+    with _hold_db() as con:
+        return {r[0] for r in con.execute(f"SELECT path FROM {HOLDS[kind][0]}")}
+
+
+def set_hold(kind: str, values: dict[str, str | None], on: bool = True) -> int:
+    """Hold (on) or release the genre/colour of these tracks. values: {path: the value held, for display}."""
+    table, _col = HOLDS[kind]
+    with _hold_db() as con:
+        if on:
+            now = time.strftime("%Y-%m-%d %H:%M")
+            con.executemany(f"INSERT OR IGNORE INTO {table} VALUES (?, ?, ?)", [(p, v, now) for p, v in values.items()])
+        else:
+            con.executemany(f"DELETE FROM {table} WHERE path=?", [(p,) for p in values])
+        return con.total_changes
+
+
+def holds_list() -> dict:
+    with _hold_db() as con:
+        return {kind: [{"file": Path(r[0]).name, kind: r[1], "since": r[2], "path": r[0]}
+                       for r in con.execute(f"SELECT path, {col}, at FROM {table} ORDER BY at, path")]
+                for kind, (table, col) in HOLDS.items()}
+
+
+def hold_matching(kind: str, text: str, on: bool = True) -> dict:
+    """Hold (or release) the scanned tracks whose path contains text. At most 10, so a typo can't hold half
+    the collection."""
+    t = text.lower()
+    if on:
+        with sqlite3.connect(NATIVE_DB) as con:
+            rows = [r for r in con.execute("SELECT path, tag_genre, traktor_color FROM tracks") if t in r[0].lower()]
+        values = {r[0]: r[1] if kind == "genre" else r[2] for r in rows}
+    else:
+        values = {p: None for p in held(kind) if t in p.lower()}
+    if not values:
+        raise SystemExit(f'No {"scanned" if on else "held"} track has "{text}" in its path.')
+    if len(values) > 10:
+        raise SystemExit(f'"{text}" matches {len(values)} tracks; use more of the name.')
+    set_hold(kind, values, on)
+    return {"held" if on else "released": sorted(Path(p).name for p in values), "kind": kind}
+
+
 def db() -> sqlite3.Connection:
     HOME.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB)
@@ -116,10 +174,10 @@ def camelot_to_key(code: str) -> str | None:
 def _wanted(row: dict, fields: list[str]) -> dict:
     wanted = {}
     bpm, cam = row.get("traktor_bpm") or row.get("bpm"), row.get("traktor_camelot") or row.get("camelot")
-    if "genre" in fields and row.get("genre"):
+    if "genre" in fields and row.get("genre") and row.get("path") not in held("genre"):
         wanted["genre"] = row["genre"]
     if "bpm" in fields and bpm:
-        wanted["bpm"] = str(int(round(bpm)))
+        wanted["bpm"] = str(analysis.round_bpm(bpm))
     if "key" in fields:
         if row.get("traktor_camelot"):
             k = camelot_to_key(row["traktor_camelot"])
@@ -273,6 +331,9 @@ def tag_from_db(roots: list[str] | None, fields: list[str], min_score: float = 0
     stats = {"written": 0, "unchanged": 0, "skipped_low_score": 0, "skipped_changed_since_scan": 0,
              "missing": 0, "errors": 0}
     examples = []
+    genre_held = held("genre") if "genre" in fields else set()
+    if genre_held:
+        stats["genre_held"] = sum(r["path"] in genre_held for r in rows)  # their genre tag stays as it is
     for r in rows:
         p = Path(r["path"])
         if not p.exists():

@@ -30,6 +30,10 @@ Step-by-step recipes are in [GUIDE.html](GUIDE.html#tasks) (`open docs/GUIDE.htm
 | The catalogue as heard at one tempo with key lock (145 by default, `--bpm` for any): genres, colours, hype; own CSV + NML; swap Traktor to it and back | `tempo scan / report / load / native` | ✅ |
 | Redo a tempo view's genres, colours, hype after rule or colour changes (seconds) | `tempo refresh` | ✅ |
 | The same view in Lexicon (genre, colour, hype in Comment and Energy, smartlists) | `tempo load --lexicon` / `native --lexicon` | 🧪 load tested on real Lexicon; `native --lexicon` only against a stand-in API |
+| Everything in a local web page: charts, track list, hype, colours, tempo view, mixes; a snapshot file to share | `web` | ✅ |
+| Keep a track's genre or colour as it is when writing | `hold`, or the web page | ✅ |
+| Cue points and a mix loop per track, learned from your own cues; approve them and write them into free hot-cue slots | `cues train / scan / show / apply`, the web page | ✅ |
+| Loop ideas saved as WAV samples in Traktor's sample folder, cut on Traktor's timeline | the web page | ✅ |
 
 ## Ideas
 

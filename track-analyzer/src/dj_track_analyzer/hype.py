@@ -92,9 +92,11 @@ def _traktor_info(nml: str | None) -> dict[str, dict]:
 
 def find(nml: str | None = None, least: bool = False, colour: str | None = None, bpm: float | None = None,
          bpm_tolerance_pct: float = 4.0, key: str | None = None, gems: bool = False, limit: int = 25,
-         progress=log) -> dict:
+         progress=log, rescore: bool = True) -> dict:
+    """rescore=False uses the hype stored by the last scan instead of recomputing it (writes nothing)."""
     con = collection.db()
-    hype = compute(con, progress)
+    hype = compute(con, progress) if rescore else dict(
+        con.execute("SELECT path, hype FROM tracks WHERE hype IS NOT NULL").fetchall())
     tk = _traktor_info(nml)
     rows = {r["path"]: r for r in con.execute(
         f"SELECT path, artist, title, filename, {collection.BPM_SQL} AS bpm, {collection.CAMELOT_SQL} AS camelot, "
